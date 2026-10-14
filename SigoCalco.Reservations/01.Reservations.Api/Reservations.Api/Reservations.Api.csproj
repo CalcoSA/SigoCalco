@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\02.Reservations.Application\Reservations.Application\Reservations.Application.csproj" />
+    <ProjectReference Include="..\..\04.Reservations.Infrastructure\Reservations.Infrastructure.Persistence\Reservations.Infrastructure.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>
