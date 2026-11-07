@@ -1,0 +1,59 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "01.Authentication.Api", "01.Authentication.Api", "{D4AEE452-B58F-4BBC-8D3A-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigoCalco.Authentication.Api", "01.Authentication.Api\Authentication.Api\Authentication.Api.csproj", "{D4AEE452-B58F-4BBC-8D3A-000000000011}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "02.Authentication.Application", "02.Authentication.Application", "{D4AEE452-B58F-4BBC-8D3A-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigoCalco.Authentication.Application", "02.Authentication.Application\Authentication.Application\Authentication.Application.csproj", "{D4AEE452-B58F-4BBC-8D3A-000000000012}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "03.Authentication.Domain", "03.Authentication.Domain", "{D4AEE452-B58F-4BBC-8D3A-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigoCalco.Authentication.Domain", "03.Authentication.Domain\Authentication.Domain\Authentication.Domain.csproj", "{D4AEE452-B58F-4BBC-8D3A-000000000013}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "04.Authentication.Infrastructure", "04.Authentication.Infrastructure", "{D4AEE452-B58F-4BBC-8D3A-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigoCalco.Authentication.Infrastructure.Persistence", "04.Authentication.Infrastructure\Authentication.Infrastructure.Persistence\Authentication.Infrastructure.Persistence.csproj", "{D4AEE452-B58F-4BBC-8D3A-000000000014}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "05.Authentication.Test", "05.Authentication.Test", "{D4AEE452-B58F-4BBC-8D3A-000000000005}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigoCalco.Authentication.Test", "05.Authentication.Test\Authentication.Test\Authentication.Test.csproj", "{D4AEE452-B58F-4BBC-8D3A-000000000015}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D4AEE452-B58F-4BBC-8D3A-000000000011}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000011}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000011}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000011}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000012}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000013}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000013}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000013}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000013}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000014}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000014}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000014}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000014}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000015}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000015}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000015}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AEE452-B58F-4BBC-8D3A-000000000015}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D4AEE452-B58F-4BBC-8D3A-000000000011} = {D4AEE452-B58F-4BBC-8D3A-000000000001}
+		{D4AEE452-B58F-4BBC-8D3A-000000000012} = {D4AEE452-B58F-4BBC-8D3A-000000000002}
+		{D4AEE452-B58F-4BBC-8D3A-000000000013} = {D4AEE452-B58F-4BBC-8D3A-000000000003}
+		{D4AEE452-B58F-4BBC-8D3A-000000000014} = {D4AEE452-B58F-4BBC-8D3A-000000000004}
+		{D4AEE452-B58F-4BBC-8D3A-000000000015} = {D4AEE452-B58F-4BBC-8D3A-000000000005}
+	EndGlobalSection
+EndGlobal
