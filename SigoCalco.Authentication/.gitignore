@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+.vs/
+.artifacts/
+TestResults/
+*.user
+*.suo
+**/appsettings.*.json
+.env
+.env.*
