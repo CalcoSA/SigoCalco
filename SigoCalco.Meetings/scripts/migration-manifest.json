@@ -1,0 +1,87 @@
+{
+  "Database": "bdcalco_sigocalco",
+  "Hostname": "COMDEATECL33",
+  "Port": "3306",
+  "ServerUuid": "6f5f45b3-9fc3-11f1-b008-b082e2815ab3",
+  "Version": "8.0.46",
+  "OriginalTables": [
+    "sigocalco_authentication_log",
+    "sigocalco_authentication_menuoption",
+    "sigocalco_authentication_role",
+    "sigocalco_authentication_rolemenuoption",
+    "sigocalco_authentication_sessions",
+    "sigocalco_authentication_solution_center",
+    "sigocalco_authentication_userrole",
+    "sigocalco_authentication_users",
+    "sigocalco_meetings_attendee",
+    "sigocalco_meetings_commitment",
+    "sigocalco_meetings_meeting",
+    "sigocalco_meetings_meeting_attendee",
+    "sigocalco_meetings_minute",
+    "sigocalco_meetings_minute_attendee",
+    "sigocalco_meetings_minute_template",
+    "sigocalco_meetings_minute_type",
+    "sigocalco_meetings_topic"
+  ],
+  "Legacy": [
+    {
+      "Table": "sigocalco_meetings_attendee",
+      "ExpectedRows": 0,
+      "SchemaSha256": "BE3900E826F0924DD27DF595AADCAD6FC7FE587A607EC68EE5962EAAA0D5A745"
+    },
+    {
+      "Table": "sigocalco_meetings_commitment",
+      "ExpectedRows": 0,
+      "SchemaSha256": "660083C6813BBCF0458F3DE0C4C5DF7F60ED9E9DE3CE207759F0CA7DEFD32BC3"
+    },
+    {
+      "Table": "sigocalco_meetings_meeting",
+      "ExpectedRows": 0,
+      "SchemaSha256": "20A3CDC31683F879A599A56522469157BBE3C519FC1931902BB5D42D6E3D0FC0"
+    },
+    {
+      "Table": "sigocalco_meetings_meeting_attendee",
+      "ExpectedRows": 0,
+      "SchemaSha256": "36EC61BA20DDD1FBBEAA4E2B31AE7FA4DED92B2983003B448A126D63E9BC1014"
+    },
+    {
+      "Table": "sigocalco_meetings_minute",
+      "ExpectedRows": 0,
+      "SchemaSha256": "32FBCDDF6918B1F9EA6D74755010D613156DE7B2D38D956B7CACFA78FE440318"
+    },
+    {
+      "Table": "sigocalco_meetings_minute_attendee",
+      "ExpectedRows": 0,
+      "SchemaSha256": "D959EFDD09ED995B037CBC25683DFD994643F2C55877FE9FE019548E95090500"
+    },
+    {
+      "Table": "sigocalco_meetings_minute_template",
+      "ExpectedRows": 0,
+      "SchemaSha256": "6ECF815641923BC426966A6249B60B32BC97E8A9AA48CC33554409298D26A9CA"
+    },
+    {
+      "Table": "sigocalco_meetings_minute_type",
+      "ExpectedRows": 0,
+      "SchemaSha256": "9B57A9B8CD4975D92E1B0462E3407B7DBD40A32E49FF740CE01CA3D53CB941D4"
+    },
+    {
+      "Table": "sigocalco_meetings_topic",
+      "ExpectedRows": 0,
+      "SchemaSha256": "7A74E10BA483C111A4D9F9172C01B365766CEA760F40D396E8672F7748416D5E"
+    }
+  ],
+  "Scripts": [
+    {
+      "File": "sql/01_remove_empty_old_model.sql",
+      "Sha256": "011BEFD10B2728321B8339F641745837C0A06D8716ACEF4A05BDBDC91CECA839"
+    },
+    {
+      "File": "sql/02_create_model.sql",
+      "Sha256": "272C5656EA9184087BC86BF8089F7B524787F5FE6FDF1ED4899ECDE51F6CE6F9"
+    },
+    {
+      "File": "sql/03_seed_catalogs_permissions.sql",
+      "Sha256": "AC6868A9428266B6C0481F566BC15E91B71AD8B45C19458333CEDBBD327D63C3"
+    }
+  ]
+}

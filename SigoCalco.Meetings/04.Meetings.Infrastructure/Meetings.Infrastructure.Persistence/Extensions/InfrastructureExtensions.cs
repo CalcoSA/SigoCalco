@@ -2,8 +2,8 @@
 using Meetings.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Meetings.Domain.Interfaces;
 using Meetings.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Configuration;
 
 namespace Meetings.Infrastructure.Persistence.Extensions;
 
@@ -15,23 +15,20 @@ public static class InfrastructureExtensions
     /// </summary>
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        string connectionString)
+        IConfiguration configuration)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(
-            connectionString);
-
         services.AddDbContext<MeetingsDbContext>(options =>
-            options.UseMySql(
-                connectionString,
-                ServerVersion.AutoDetect(connectionString)));
-        // Registro de repositorios
-        services.AddScoped<IMinuteRepository, MinuteRepository>();
-
-        services.AddScoped<IMeetingRepository, MeetingRepository>();
-
-        services.AddScoped<IAttendeeRepository,AttendeeRepository>();
-
-        services.AddScoped<IAttendeeAssignmentRepository,AttendeeAssignmentRepository>();
+        {
+            var connectionString = configuration.GetConnectionString("MeetingsDatabase");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException("Configure ConnectionStrings:MeetingsDatabase externamente.");
+            options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 46)));
+        });
+        services.AddScoped<Meetings.Application.Interfaces.ITemplateStore, TemplateStore>();
+        services.AddScoped<Meetings.Application.Interfaces.IActaStore, ActaStore>();
+        services.AddScoped<Meetings.Application.Interfaces.IMeetingIntegrationService, Services.MeetingIntegrationService>();
+        services.AddSingleton<Meetings.Application.Interfaces.IRoomReservationProvider, Services.SimulatedRoomReservationProvider>();
+        services.AddScoped<Meetings.Application.Interfaces.IAuthenticationDirectory, Services.AuthenticationDirectory>();
 
         return services;
     }

@@ -8,6 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.17" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -16,6 +19,17 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Test the actual Authentication issuer without changing or building that service. -->
+  <ItemGroup>
+    <Compile Include="../../../SigoCalco.Authentication/02.Authentication.Application/Authentication.Application/Services/JwtTokenApplication.cs" Link="AuthenticationContract/JwtTokenApplication.cs" />
+    <Compile Include="../../../SigoCalco.Authentication/02.Authentication.Application/Authentication.Application/Interfaces/IJwtTokenApplication.cs" Link="AuthenticationContract/IJwtTokenApplication.cs" />
+    <Compile Include="../../../SigoCalco.Authentication/03.Authentication.Domain/Authentication.Domain/Dtos/UserDto.cs" Link="AuthenticationContract/UserDto.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../scripts/sql/*.sql" Link="sql/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
