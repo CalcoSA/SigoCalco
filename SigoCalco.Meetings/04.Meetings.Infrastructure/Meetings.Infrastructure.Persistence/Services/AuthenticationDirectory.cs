@@ -19,7 +19,7 @@ public sealed class AuthenticationDirectory(MeetingsDbContext context) : IAuthen
         {
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT r.nameRole, c.solution_center_code
+                SELECT r.nameRole, c.solution_center_code, u.userName, u.email
                 FROM sigocalco_authentication_users u
                 JOIN sigocalco_authentication_userrole ur ON ur.IdUser = u.IdUser
                 JOIN sigocalco_authentication_role r ON r.IdRole = ur.IdRole
@@ -30,16 +30,19 @@ public sealed class AuthenticationDirectory(MeetingsDbContext context) : IAuthen
             var role = command.CreateParameter(); role.ParameterName = "@roleId"; role.Value = roleId; command.Parameters.Add(role);
             var roles = new HashSet<string>(StringComparer.Ordinal);
             var centers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string? userName = null, email = null;
             await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
-                var actualRole = TemplateApplication.NormalizeRole(reader.GetString(0));
-                if (actualRole != TemplateApplication.NormalizeRole(roleName)) continue;
+                var actualRole = MeetingsPermissions.NormalizeRole(reader.GetString(0));
+                if (actualRole != MeetingsPermissions.NormalizeRole(roleName)) continue;
                 roles.Add(actualRole);
                 centers.Add(reader.GetString(1));
+                userName = reader.IsDBNull(2) ? null : reader.GetString(2);
+                email = reader.IsDBNull(3) ? null : reader.GetString(3);
             }
             if (roles.Count == 0) throw MeetingsRequestException.Forbidden();
-            return new(userId, roles, centers);
+            return new(userId, roles, centers, userName, email);
         }
         finally { if (opened) await connection.CloseAsync(); }
     }

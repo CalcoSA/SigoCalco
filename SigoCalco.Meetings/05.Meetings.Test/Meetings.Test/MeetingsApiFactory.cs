@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using Meetings.Application.Interfaces;
+using Meetings.Application.Services;
+using Microsoft.Extensions.Logging;
 using Meetings.Domain.Exceptions;
 using Meetings.Domain.Models.Actas;
 using Meetings.Infrastructure.Persistence.Data;
@@ -37,7 +39,7 @@ public sealed class StubDirectory : IAuthenticationDirectory
     public Task<MeetingsIdentity> ResolveAsync(int userId, int roleId, string roleName, CancellationToken ct)
     {
         if (userId != 1 || roleId != 1 || roleName != "Administrador") throw MeetingsRequestException.Forbidden();
-        return Task.FromResult(new MeetingsIdentity(1, [" Administrador "], ["R01"]));
+        return Task.FromResult(new MeetingsIdentity(1, [" Administrador "], ["R01"], "Organizador de prueba", "organizer@example.invalid"));
     }
 }
 
@@ -55,10 +57,11 @@ public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:MeetingsDatabase"] = "Server=127.0.0.1;Database=never_connect_tests;",
-            ["Jwt:Secret"] = Secret, ["Jwt:Issuer"] = "meetings-tests", ["Jwt:Audience"] = "meetings-tests"
+            ["Jwt:Secret"] = Secret, ["Jwt:Issuer"] = "meetings-tests", ["Jwt:Audience"] = "meetings-tests", ["Smtp:Enabled"] = "false"
         }));
         builder.ConfigureServices(services =>
         {
@@ -81,11 +84,10 @@ public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
         if (context.Database.EnsureCreated())
         {
             context.AddRange(new ActaType { ActaTypeId = 1, Code = "REUNION", Name = "Acta de reunión" },
-                new ActaType { ActaTypeId = 2, Code = "DISCIPLINARIA", Name = "Acta disciplinaria" },
                 new ActaType { ActaTypeId = 3, Code = "ADMINISTRATIVA", Name = "Acta administrativa" });
-            foreach (var code in new[] { "REUNION", "DISCIPLINARIA", "ADMINISTRATIVA" })
-                foreach (var operation in new[] { "PLANTILLA_CREACION", "PLANTILLA_LECTURA", "VERSION_CREACION" })
-                    context.Add(new MeetingsPermission { PermissionKey = $"ACTA_{code}_{operation}", PermissionValue = "ADMINISTRADOR" });
+            foreach (var key in MeetingsPermissions.Keys)
+                context.Add(new MeetingsPermission { PermissionKey = key,
+                    PermissionValue = key is MeetingsPermissions.GlobalManage or MeetingsPermissions.CenterManage ? "ADMINISTRADOR" : "" });
             context.SaveChanges();
         }
         return client;

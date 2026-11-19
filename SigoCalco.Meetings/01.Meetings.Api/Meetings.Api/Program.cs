@@ -43,21 +43,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<ITemplateApplication, TemplateApplication>();
 builder.Services.AddScoped<IActaApplication, ActaApplication>();
-builder.Services.AddSingleton(provider =>
+builder.Services.AddSingleton<MeetingNotificationComposer>();
+builder.Services.AddSingleton(provider => provider.GetRequiredService<IConfiguration>().GetSection("Smtp").Get<SmtpOptions>() ?? new());
+builder.Services.AddScoped<IMeetingNotificationSender>(provider =>
 {
-    var options = provider.GetRequiredService<IConfiguration>().GetSection("Integrations:Calendar").Get<CalendarOptions>() ?? new();
-    if (options.Mode is not ("Simulated" or "Graph")) throw new InvalidOperationException("Calendar:Mode debe ser Simulated o Graph.");
-    return options;
-});
-builder.Services.AddHttpClient("GraphTransport", client => client.Timeout = TimeSpan.FromSeconds(20))
-    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) });
-builder.Services.AddSingleton(provider => new GraphAccessTokenProvider(
-    provider.GetRequiredService<IHttpClientFactory>().CreateClient("GraphTransport"), provider.GetRequiredService<CalendarOptions>()));
-builder.Services.AddScoped<IMeetingCalendarProvider>(provider =>
-{
-    var options = provider.GetRequiredService<CalendarOptions>();
-    return options.Mode == "Simulated" ? new SimulatedCalendarProvider() : new GraphCalendarProvider(
-        provider.GetRequiredService<IHttpClientFactory>().CreateClient("GraphTransport"), provider.GetRequiredService<GraphAccessTokenProvider>(), options);
+    var options = provider.GetRequiredService<SmtpOptions>();
+    return options.Enabled ? new SmtpNotificationSender(options) : new SimulatedNotificationSender();
 });
 builder.Services.AddScoped<IMeetingsIdentity, MeetingsIdentityAccessor>();
 builder.Services.AddSingleton<ISectionContentValidator, FormSectionValidator>();
@@ -104,6 +95,25 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+if (builder.Configuration["retry-notification"] is { } notificationKey)
+{
+    if (!long.TryParse(notificationKey, out var notificationId) || notificationId <= 0)
+        throw new InvalidOperationException("retry-notification requiere un identificador positivo.");
+    using var scope = app.Services.CreateScope();
+    try
+    {
+        var result = await scope.ServiceProvider.GetRequiredService<IMeetingNotificationService>().RetryAsync(notificationId, CancellationToken.None);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(ApiResponse.Success(result), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+        Environment.ExitCode = result.State is "ERROR" or "INCIERTO" or "PROCESANDO" ? 1 : 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine(ex is Meetings.Domain.Exceptions.MeetingsRequestException request ? request.Message : "No se pudo recuperar la notificación. Revise MySQL y la configuración local.");
+        Environment.ExitCode = 1;
+    }
+    await app.DisposeAsync();
+    return;
+}
 // Explicit local operator recovery; no new HTTP endpoint or automatic sending on startup.
 if (builder.Configuration["retry-meeting"] is { } retryId)
 {

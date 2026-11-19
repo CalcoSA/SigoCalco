@@ -65,12 +65,17 @@ public sealed class ActaStore(MeetingsDbContext db) : IActaStore
                     {
                         MeetingId = meeting.MeetingId, ExternalRoomId = input.RoomId, RequestedAt = DateTime.UtcNow
                     });
-                    else db.Add(new MeetingCalendar { MeetingId = meeting.MeetingId, OrganizerEmail = input.OrganizerEmail!, CreateTeams = true });
+                    foreach (var notification in input.Notifications)
+                    {
+                        notification.MeetingNotificationId = 0;
+                        notification.MeetingId = meeting.MeetingId;
+                        db.Add(notification);
+                    }
                 }
                 await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return new(input.Acta.ActaId, input.Acta.ActaCode, input.Meeting?.MeetingId, input.Meeting?.Modality,
-                    input.Meeting is null ? null : new(input.Meeting.Modality == "VIRTUAL" ? "MICROSOFT_GRAPH" : "RESERVATIONS", "PENDIENTE", false));
+                    input.Meeting?.Modality == "PRESENCIAL" ? new("RESERVATIONS", "PENDIENTE", false) : null);
             }
             catch (DbUpdateException ex) when (ex.InnerException is MySqlException { Number: 1062 })
             {

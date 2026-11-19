@@ -1,5 +1,6 @@
 using System.Data;
 using Meetings.Application.Interfaces;
+using Meetings.Application.Services;
 using Meetings.Domain.Exceptions;
 using Meetings.Domain.Models.Actas;
 using Meetings.Infrastructure.Persistence.Data;
@@ -11,7 +12,7 @@ namespace Meetings.Infrastructure.Persistence.Repositories;
 public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
 {
     public async Task<IReadOnlyList<ActaType>> GetTypesAsync(CancellationToken ct) =>
-        await context.Set<ActaType>().AsNoTracking().OrderBy(t => t.ActaTypeId).ToListAsync(ct);
+        await context.Set<ActaType>().AsNoTracking().Where(t => MeetingsPermissions.ActiveTypeCodes.Contains(t.Code)).OrderBy(t => t.ActaTypeId).ToListAsync(ct);
     public Task<Template?> FindAsync(int id, CancellationToken ct) =>
         context.Set<Template>().AsNoTracking().Include(t => t.ActaType).SingleOrDefaultAsync(t => t.TemplateId == id, ct);
     public async Task<int> CreateAsync(Template template, CancellationToken ct)
@@ -22,6 +23,29 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
     }
     public async Task<IReadOnlyDictionary<string, string>> GetPermissionsAsync(CancellationToken ct) =>
         await context.Set<MeetingsPermission>().AsNoTracking().ToDictionaryAsync(p => p.PermissionKey, p => p.PermissionValue, ct);
+
+    public async Task<Template> CreateWithVersionAsync(Template template, CancellationToken ct)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            await CreateAsync(template, ct);
+            await transaction.CommitAsync(ct);
+            return template;
+        }
+        catch { await transaction.RollbackAsync(CancellationToken.None); context.ChangeTracker.Clear(); throw; }
+    }
+    public async Task<IReadOnlyList<TemplateVersion>> GetVersionsAsync(int templateId, CancellationToken ct) =>
+        await context.Set<TemplateVersion>().AsNoTracking().Where(v => v.TemplateId == templateId).OrderBy(v => v.VersionNumber)
+            .Include(v => v.Sections.OrderBy(s => s.SortOrder)).AsSplitQuery().ToListAsync(ct);
+    public Task<TemplateVersion?> FindVersionAsync(int versionId, CancellationToken ct) =>
+        context.Set<TemplateVersion>().AsNoTracking().Include(v => v.Sections.OrderBy(s => s.SortOrder))
+            .SingleOrDefaultAsync(v => v.TemplateVersionId == versionId, ct);
+    public async Task UpdateNameAsync(int templateId, string name, CancellationToken ct)
+    {
+        if (await context.Set<Template>().Where(t => t.TemplateId == templateId).ExecuteUpdateAsync(s => s.SetProperty(t => t.Name, name), ct) != 1)
+            throw MeetingsRequestException.NotFound("No se encontró la plantilla.");
+    }
 
     public async Task<TemplateVersion> CreateVersionAsync(TemplateVersion version, CancellationToken ct)
     {
@@ -61,12 +85,13 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
     }
 
     public async Task<TemplatePage> GetAsync(int page, int pageSize, int? actaTypeId, string? scope,
-        IReadOnlyCollection<int> readableTypeIds, IReadOnlyCollection<string> centerCodes, bool allCenters, CancellationToken ct)
+        IReadOnlyCollection<int> readableTypeIds, IReadOnlyCollection<string> centerCodes, TemplateVisibility visibility, CancellationToken ct)
     {
         var query = context.Set<Template>().AsNoTracking().Where(t => readableTypeIds.Contains(t.ActaTypeId));
         if (actaTypeId.HasValue) query = query.Where(t => t.ActaTypeId == actaTypeId);
         if (scope is not null) query = query.Where(t => t.Scope == scope);
-        if (!allCenters) query = query.Where(t => t.Scope == "GLOBAL" || centerCodes.Contains(t.SolutionCenterCode!));
+        query = query.Where(t => t.Scope == "GLOBAL" && visibility.Global || t.Scope == "CENTRO" &&
+            (visibility.AllCenters || visibility.OwnCenters && centerCodes.Contains(t.SolutionCenterCode!)));
         // A stable snapshot keeps pagination metadata and nested collections consistent.
         var isolation = context.Database.IsMySql() ? IsolationLevel.RepeatableRead : IsolationLevel.Serializable;
         await using var transaction = await context.Database.BeginTransactionAsync(isolation, ct);

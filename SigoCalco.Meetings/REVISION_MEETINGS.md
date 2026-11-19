@@ -1,6 +1,6 @@
 # Meetings: cierre de implementación
 
-Nota de continuidad: este documento registra el cierre de la migración anterior. La ampliación posterior de respuestas uniformes, quinto endpoint y proveedores está documentada en [docs/ACTAS_Y_CALENDARIO.md](docs/ACTAS_Y_CALENDARIO.md), con 91 pruebas aprobadas. No se repitió la migración.
+Documento histórico: sus conteos y permisos corresponden al cierre anterior. La entrega vigente está documentada en [docs/MIS_PLANTILLAS_Y_SMTP.md](docs/MIS_PLANTILLAS_Y_SMTP.md): dos tipos, seis permisos, nueve operaciones HTTP y SMTP. La migración original no se repitió.
 
 Estado comprobado el 11/11/2026.
 

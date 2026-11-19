@@ -15,12 +15,12 @@ public sealed class ActasSchemaContext(DbContextOptions<ActasSchemaContext> opti
 public sealed class SchemaTests
 {
     [Fact]
-    public void Runtime_model_contains_only_the_17_current_tables()
+    public void Runtime_model_contains_18_Meetings_tables_including_notifications_and_retained_calendar()
     {
         using var db = new Meetings.Infrastructure.Persistence.Data.MeetingsDbContext(
             new DbContextOptionsBuilder<Meetings.Infrastructure.Persistence.Data.MeetingsDbContext>()
                 .UseMySql("Server=127.0.0.1;Database=unused;", new MySqlServerVersion(new Version(8,0,46))).Options);
-        Assert.Equal(17, db.Model.GetEntityTypes().Count());
+        Assert.Equal(18, db.Model.GetEntityTypes().Count());
         Assert.Equal("sigocalco_meetings_meeting", db.Model.FindEntityType(typeof(ScheduledMeeting))!.GetTableName());
         Assert.All(db.Model.GetEntityTypes(), e => Assert.StartsWith("sigocalco_meetings_", e.GetTableName()));
     }
@@ -32,7 +32,7 @@ public sealed class SchemaTests
     public void Schema_is_Meetings_only_and_has_internal_relational_guards()
     {
         using var db = Context();
-        Assert.Equal(17, db.Model.GetEntityTypes().Count());
+        Assert.Equal(18, db.Model.GetEntityTypes().Count());
         Assert.All(db.Model.GetEntityTypes(), e => Assert.StartsWith("sigocalco_meetings_", e.GetTableName()));
         Assert.All(db.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()),
             fk => Assert.StartsWith("sigocalco_meetings_", fk.PrincipalEntityType.GetTableName()));
@@ -62,11 +62,15 @@ public sealed class SchemaTests
         {
             var file = Path.Combine(AppContext.BaseDirectory, "sql", "02_create_model.sql");
             Assert.True(File.Exists(file), "Debe generarse y revisar 02_create_model.sql.");
-            Assert.Equal(sql.Trim(), File.ReadAllText(file).Replace("\r\n", "\n").Trim());
+            var incremental = Path.Combine(AppContext.BaseDirectory, "sql", "04_add_meeting_notifications.sql");
+            Assert.True(File.Exists(incremental));
+            static string[] Statements(string value) => value.Replace("\r\n", "\n").Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim()).Where(s => s.Length > 0).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+            Assert.Equal(Statements(sql), Statements(File.ReadAllText(file) + "\n" + File.ReadAllText(incremental)));
         }
         Assert.DoesNotContain("authentication", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER DATABASE", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(17, Regex.Matches(sql, "CREATE TABLE").Count);
+        Assert.Equal(18, Regex.Matches(sql, "CREATE TABLE").Count);
     }
 }
 

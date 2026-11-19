@@ -3,8 +3,13 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Meetings.Application.Dtos;
+using Meetings.Application.Interfaces;
+using Meetings.Application.Services;
 using Meetings.Domain.Models.Actas;
 using Meetings.Infrastructure.Persistence.Data;
+using Meetings.Infrastructure.Persistence.Repositories;
+using Meetings.Infrastructure.Persistence.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -36,8 +41,7 @@ public sealed class MySqlApiFactory(IReadOnlyDictionary<string, string?> setting
 
 public sealed class MySqlVerificationTests
 {
-    // The authorized scope stays exactly one template, two versions and two sections.
-    // Exercise the four HTTP endpoints with those same records, then remove only their IDs.
+    // Controlled local fixtures: unique names/IDs, simulated notifications, and cleanup restricted to those fixtures.
     [ApprovedMySqlFact]
     public async Task Concurrent_versions_use_distinct_numbers_and_persist_their_sections()
     {
@@ -70,6 +74,7 @@ public sealed class MySqlVerificationTests
             ["ConnectionStrings:MeetingsDatabase"] = connection,
             ["Jwt:Secret"] = MeetingsApiFactory.Secret, // Isolated signing key for automated verification.
             ["Jwt:Issuer"] = authConfig["Jwt:Issuer"], ["Jwt:Audience"] = authConfig["Jwt:Audience"],
+            ["Smtp:Enabled"] = "false",
             ["Logging:LogLevel:Default"] = "Warning"
         };
         var actor = await db.Database.SqlQueryRaw<VerificationActor>("""
@@ -89,10 +94,11 @@ public sealed class MySqlVerificationTests
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
         var types = await client.GetResultAsync<ActaTypeDto[]>("/api/v1/acta-types");
-        Assert.Equal(3, types!.Length);
+        Assert.Equal(2, types!.Length);
         var type = await db.Set<ActaType>().SingleAsync(t => t.Code == "REUNION");
         var name = "CODEX-MIGRATION-VERIFY-" + Guid.NewGuid().ToString("N");
         var id = 0;
+        var completeId = 0;
         try
         {
             using var created = await client.PostAsJsonAsync("/api/v1/templates", new CreateTemplateDto(type.ActaTypeId, name, "GLOBAL", null));
@@ -116,8 +122,23 @@ public sealed class MySqlVerificationTests
             Assert.Equal(actor.IdUser, item.CreatedByUser);
             Assert.Equal(new[] { 1, 2 }, item.Versions.Select(v => v.VersionNumber));
             Assert.All(item.Versions, v => Assert.Single(v.Sections));
+            using var completeResponse = await client.PostAsJsonAsync("/api/v1/templates/with-version",
+                TemplateManagementTests.Request() with { ActaTypeId = type.ActaTypeId, Name = name + "-complete" });
+            Assert.Equal(HttpStatusCode.Created, completeResponse.StatusCode);
+            var complete = (await completeResponse.Content.ReadResultAsync<CreatedTemplateWithVersionDto>())!;
+            completeId = complete.TemplateId;
+            Assert.Equal(1, complete.VersionNumber);
+            var listedVersions = (await client.GetResultAsync<TemplateVersionDto[]>($"/api/v1/templates/{id}/versions"))!;
+            Assert.Equal(new[] { 1, 2 }, listedVersions.Select(v => v.VersionNumber));
+            var detail = (await client.GetResultAsync<TemplateVersionDetailDto>($"/api/v1/template-versions/{complete.TemplateVersionId}"))!;
+            Assert.Equal(complete.TemplateId, detail.TemplateId); Assert.Single(detail.Sections);
+            using var updated = await client.PutAsJsonAsync($"/api/v1/templates/{completeId}", new UpdateTemplateDto(name + "-renamed"));
+            Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+            Assert.Equal(name + "-renamed", (await updated.Content.ReadResultAsync<TemplateDto>())!.Name);
+            Assert.Equal(MeetingsPermissions.Keys.Order(), (await new TemplateStore(db).GetPermissionsAsync(default)).Keys.Order());
+            await VerifyActasAndNotifications(db, actor.IdUser, type.ActaTypeId, complete);
             // The new route reaches real MySQL, but must not bypass the still-empty acta creation grant.
-            var creationGrant = await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == "ACTA_REUNION_CREACION");
+            var creationGrant = await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == "ACTAS_GESTION");
             if (string.IsNullOrWhiteSpace(creationGrant.PermissionValue))
             {
                 using var denied = await ActaApiTests.SendAsync(client, new CreateActaDto(
@@ -127,16 +148,87 @@ public sealed class MySqlVerificationTests
         }
         finally
         {
-            if (id > 0)
+            if (id > 0 || completeId > 0)
             {
+                var ownedTemplates = new[] { id, completeId }.Where(value => value > 0).ToArray();
                 await using var cleanup = await db.Database.BeginTransactionAsync();
                 await db.Set<TemplateSection>().Where(s => db.Set<TemplateVersion>()
-                    .Any(v => v.TemplateId == id && v.TemplateVersionId == s.TemplateVersionId)).ExecuteDeleteAsync();
-                await db.Set<TemplateVersion>().Where(v => v.TemplateId == id).ExecuteDeleteAsync();
-                await db.Set<Template>().Where(t => t.TemplateId == id && t.Name == name).ExecuteDeleteAsync();
+                    .Any(v => ownedTemplates.Contains(v.TemplateId) && v.TemplateVersionId == s.TemplateVersionId)).ExecuteDeleteAsync();
+                await db.Set<TemplateVersion>().Where(v => ownedTemplates.Contains(v.TemplateId)).ExecuteDeleteAsync();
+                await db.Set<Template>().Where(t => ownedTemplates.Contains(t.TemplateId)).ExecuteDeleteAsync();
                 await cleanup.CommitAsync();
                 Assert.False(await db.Set<Template>().AnyAsync(t => t.TemplateId == id));
             }
+        }
+    }
+
+    private static async Task VerifyActasAndNotifications(MeetingsDbContext db, int userId, int typeId, CreatedTemplateWithVersionDto template)
+    {
+        var fixture = Guid.NewGuid().ToString("N");
+        var email = fixture + "@example.invalid";
+        var center = await db.Database.SqlQuery<string>($"SELECT c.solution_center_code AS Value FROM sigocalco_authentication_solution_center c JOIN sigocalco_authentication_userrole ur ON ur.solution_center_id=c.solution_center_id WHERE ur.IdUser={userId} LIMIT 1").SingleAsync();
+        var actor = new MeetingsIdentity(userId, [], [center], "Organizador de prueba", "organizer-" + email);
+        var actaIds = new List<int>();
+        var calendarCount = await db.Set<MeetingCalendar>().CountAsync();
+        try
+        {
+            foreach (var mode in new string?[] { null, "PRESENCIAL", "VIRTUAL" })
+            {
+                var now = DateTime.UtcNow;
+                var acta = new Acta { ActaCode = "ACT-" + Guid.NewGuid().ToString("N"), ActaTypeId = typeId,
+                    TemplateVersionId = template.TemplateVersionId, Title = "Verificación SMTP " + fixture, DocumentDate = DateOnly.FromDateTime(now),
+                    SolutionCenterCode = center, CreatedByUser = userId, CreatedAt = now, UpdatedAt = now };
+                var meeting = mode is null ? null : new ScheduledMeeting { Modality = mode, StartAtUtc = now.AddDays(1), EndAtUtc = now.AddDays(1).AddHours(1),
+                    TimeZone = "America/Bogota", LocationDescription = mode == "PRESENCIAL" ? "Sala de prueba" : null, OrganizerUserId = userId, CreatedAt = now, UpdatedAt = now };
+                var people = new[] { new Participant { Email = email, UserName = "Participante de prueba", ParticipantType = "EXTERNO" } };
+                var drafts = new MeetingNotificationComposer().Compose(acta, meeting, people, actor);
+                var request = new NewActa(acta, [new() { TemplateVersionId = template.TemplateVersionId, TemplateSectionId = template.Sections[0].TemplateSectionId,
+                    ContentJson = "{\"fecha\":\"2026-11-18\",\"hora\":\"10:00\",\"lugar\":\"Prueba\"}" }], people, meeting, null, drafts);
+                var result = await new ActaStore(db).CreateAsync(request, default);
+                actaIds.Add(result.ActaId);
+                Assert.Equal(userId, acta.CreatedByUser);
+                if (meeting is not null)
+                {
+                    if (mode == "PRESENCIAL") Assert.Equal("SIMULADO", (await new MeetingIntegrationService(db,
+                        new SimulatedRoomReservationProvider(), NullLogger<MeetingIntegrationService>.Instance).SynchronizeAsync(meeting.MeetingId, default)).State);
+                    var notifications = await new MeetingNotificationService(db, new SimulatedNotificationSender()).SendForMeetingAsync(meeting.MeetingId, default);
+                    Assert.Equal("SIMULADO", notifications.State); Assert.Equal(2, notifications.Items.Count); Assert.False(notifications.SmtpAccepted);
+                }
+                else Assert.Null(result.MeetingId);
+                var duplicate = await Assert.ThrowsAsync<Meetings.Domain.Exceptions.MeetingsRequestException>(() => new ActaStore(db).CreateAsync(request, default));
+                Assert.Equal(409, duplicate.StatusCode);
+            }
+            Assert.Equal(1, await db.Set<Participant>().CountAsync(p => p.Email == email));
+            Assert.Equal(calendarCount, await db.Set<MeetingCalendar>().CountAsync());
+            // A late unique-constraint error in notifications rolls back the entire new acta transaction on real MySQL.
+            var failedCode = "ACT-" + Guid.NewGuid().ToString("N");
+            var failed = new Acta { ActaCode = failedCode, ActaTypeId = typeId, TemplateVersionId = template.TemplateVersionId,
+                Title = "Rollback " + fixture, DocumentDate = DateOnly.FromDateTime(DateTime.UtcNow), SolutionCenterCode = center, CreatedByUser = userId,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            var failedMeeting = new ScheduledMeeting { Modality = "VIRTUAL", StartAtUtc = DateTime.UtcNow, EndAtUtc = DateTime.UtcNow.AddHours(1),
+                OrganizerUserId = userId, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            var duplicateMessages = new[] { "one-", "two-" }.Select(prefix => new MeetingNotification
+            {
+                RecipientEmail = prefix + email, RecipientName = "Prueba", MessageId = fixture + "@sigocalco.local", Subject = "Rollback",
+                TextBody = "Prueba", HtmlBody = "<p>Prueba</p>", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            }).ToArray();
+            await Assert.ThrowsAsync<Meetings.Domain.Exceptions.MeetingsRequestException>(() => new ActaStore(db).CreateAsync(
+                new(failed, [], [], failedMeeting, null, duplicateMessages), default));
+            Assert.False(await db.Set<Acta>().AnyAsync(a => a.ActaCode == failedCode));
+        }
+        finally
+        {
+            db.ChangeTracker.Clear();
+            await using var cleanup = await db.Database.BeginTransactionAsync();
+            var meetings = await db.Set<ScheduledMeeting>().Where(m => actaIds.Contains(m.ActaId)).Select(m => m.MeetingId).ToArrayAsync();
+            await db.Set<MeetingNotification>().Where(n => meetings.Contains(n.MeetingId)).ExecuteDeleteAsync();
+            await db.Set<MeetingReservation>().Where(r => meetings.Contains(r.MeetingId)).ExecuteDeleteAsync();
+            await db.Set<ScheduledMeeting>().Where(m => meetings.Contains(m.MeetingId)).ExecuteDeleteAsync();
+            await db.Set<ActaParticipant>().Where(p => actaIds.Contains(p.ActaId)).ExecuteDeleteAsync();
+            await db.Set<ActaSection>().Where(s => actaIds.Contains(s.ActaId)).ExecuteDeleteAsync();
+            await db.Set<Acta>().Where(a => actaIds.Contains(a.ActaId)).ExecuteDeleteAsync();
+            await db.Set<Participant>().Where(p => p.Email == email).ExecuteDeleteAsync();
+            await cleanup.CommitAsync();
         }
     }
 
@@ -147,8 +239,8 @@ public sealed class MySqlVerificationTests
             FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='bdcalco_sigocalco' AND LEFT(TABLE_NAME,19)='sigocalco_meetings_'
             """).ToListAsync();
         var model = db.Model.GetEntityTypes().ToArray();
-        Assert.Equal(17, model.Length);
-        Assert.Equal(17, columns.Select(c => c.TableName).Distinct().Count());
+        Assert.Equal(18, model.Length);
+        Assert.Equal(18, columns.Select(c => c.TableName).Distinct().Count());
         Assert.Equal(model.Sum(e => e.GetProperties().Count()), columns.Count);
         foreach (var entity in model)
         {

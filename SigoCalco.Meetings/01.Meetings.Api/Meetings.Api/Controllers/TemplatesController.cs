@@ -24,6 +24,21 @@ public sealed class TemplatesController(ITemplateApplication application) : Cont
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedTemplatesDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get([FromQuery] TemplateQuery query, CancellationToken ct) =>
-        Ok(ApiResponse.Success(await application.GetAsync(query, ct)));
+        Ok(ApiResponse.Success(await application.GetAsync(query, ct), "Plantillas consultadas correctamente."));
+
+    [HttpPost("with-version")]
+    [ProducesResponseType(typeof(ApiResponse<CreatedTemplateWithVersionDto>), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateWithVersion([FromBody] CreateTemplateWithVersionDto request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, ApiResponse.Success(await application.CreateWithVersionAsync(request, ct), "Plantilla y primera versión creadas correctamente."));
+
+    [HttpGet("{templateId:int}/versions")]
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<TemplateVersionDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Versions(int templateId, CancellationToken ct) =>
+        Ok(ApiResponse.Success(await application.GetVersionsAsync(templateId, ct), "Versiones consultadas correctamente."));
+
+    [HttpPut("{templateId:int}")]
+    [ProducesResponseType(typeof(ApiResponse<TemplateDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Update(int templateId, [FromBody] UpdateTemplateDto request, CancellationToken ct) =>
+        Ok(ApiResponse.Success(await application.UpdateAsync(templateId, request, ct), "Metadatos actualizados correctamente."));
 }
 

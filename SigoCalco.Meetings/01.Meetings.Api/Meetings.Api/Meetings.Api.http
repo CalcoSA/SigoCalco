@@ -3,24 +3,73 @@
 @templateId = 1
 @templateVersionId = 1
 @templateSectionId = 1
+@actaTypeId = 1
+@solutionCenterCode = REEMPLAZAR_POR_CENTRO_ASIGNADO
+
+# Usar exclusivamente con Smtp:Enabled=false e Integrations:Reservations:Mode=Simulated.
+# Sustituir IDs por los devueltos por la API. Tipos actuales: 1 REUNION y 3 ADMINISTRATIVA.
+# Permisos: PLANTILLAS_GLOBALES_GESTION / PLANTILLAS_GLOBALES_LECTURA,
+# PLANTILLAS_CENTRO_GESTION / PLANTILLAS_CENTRO_LECTURA, ACTAS_GESTION / ACTAS_LECTURA.
+# Actualmente solo los permisos 1 y 3 contienen Administrador; ACTAS_GESTION está vacío (403).
+# 401 sin JWT: {"isSuccess":false,"message":"Se requiere un JWT válido y vigente.","result":null}
+# 403 con JWT sin permiso: {"isSuccess":false,"message":"<motivo de autorización>","result":null}
+# Ningún ejemplo contiene tokens reales. No ejecutar envíos reales con estos destinatarios.
 
 ### Catálogo: 200. Datos en result; isSuccess y message en todas las respuestas.
 GET {{baseUrl}}/api/v1/acta-types
 Authorization: Bearer {{token}}
 
-### Crear plantilla: 201. result.templateId
+### Crear plantilla sin versión (compatibilidad): 201. result.templateId
 POST {{baseUrl}}/api/v1/templates
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "actaTypeId": 1,
+  "actaTypeId": {{actaTypeId}},
   "name": "Acta general",
   "scope": "GLOBAL",
   "solutionCenterCode": null
 }
 
+### Crear plantilla + versión 1 + secciones en una transacción: 201
+# GLOBAL requiere PLANTILLAS_GLOBALES_GESTION.
+# CENTRO requiere PLANTILLAS_CENTRO_GESTION y pertenencia al centro indicado.
+# Respuesta: {"isSuccess":true,"message":"Plantilla y primera versión creadas correctamente.",
+# "result":{"templateId":20,"templateVersionId":30,"versionNumber":1,"sections":[...]}}
+POST {{baseUrl}}/api/v1/templates/with-version
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "actaTypeId": {{actaTypeId}},
+  "name": "Acta general completa",
+  "scope": "GLOBAL",
+  "solutionCenterCode": null,
+  "sections": [{
+    "title": "Información general",
+    "contentType": "FORMULARIO",
+    "sortOrder": 1,
+    "isRequired": true,
+    "configurationJson": {
+      "fields": [
+        {"key":"fecha","label":"Fecha","type":"date","required":true},
+        {"key":"hora","label":"Hora","type":"time","required":true},
+        {"key":"lugar","label":"Lugar","type":"text","required":true}
+      ]
+    }
+  }]
+}
+
+### Todas las versiones y secciones de la plantilla: 200; result es una lista ordenada
+GET {{baseUrl}}/api/v1/templates/{{templateId}}/versions
+Authorization: Bearer {{token}}
+
+### Detalle de versión: 200; result incluye plantilla, tipo, alcance, centro y secciones
+GET {{baseUrl}}/api/v1/template-versions/{{templateVersionId}}
+Authorization: Bearer {{token}}
+
 ### Crear versión: 201. result.templateVersionId y result.sections
+# Requiere gestión del alcance y centro; el número es correlativo y la versión anterior es inmutable.
 POST {{baseUrl}}/api/v1/templates/{{templateId}}/versions
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -55,11 +104,23 @@ GET {{baseUrl}}/api/v1/templates?page=1&pageSize=20
 Authorization: Bearer {{token}}
 
 ### Consultar por tipo y alcance
-GET {{baseUrl}}/api/v1/templates?page=1&pageSize=20&actaTypeId=1&scope=GLOBAL
+GET {{baseUrl}}/api/v1/templates?page=1&pageSize=20&actaTypeId={{actaTypeId}}&scope=GLOBAL
 Authorization: Bearer {{token}}
 
-### Acta sin reunión. Requiere ACTA_REUNION_CREACION autorizado y R01 asignado al actor.
+### Consultar CENTRO; permiso 1 ve todos, permisos 3/4 solo centros asignados
+GET {{baseUrl}}/api/v1/templates?page=1&pageSize=20&actaTypeId={{actaTypeId}}&scope=CENTRO
+Authorization: Bearer {{token}}
+
+### Actualizar únicamente nombre: 200. Cambiar tipo/centro/alcance/secciones devuelve 400.
+PUT {{baseUrl}}/api/v1/templates/{{templateId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name":"Acta general actualizada"}
+
+### Acta sin reunión. Requiere ACTAS_GESTION y centro asignado al actor.
 # Cambiar UUID para una NUEVA operación. Reutilizarlo al reintentar devuelve 409 sin duplicar.
+# 201: result.integration=null y result.notifications=null. Sin envío automático.
 POST {{baseUrl}}/api/v1/actas
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -69,7 +130,7 @@ Idempotency-Key: 11111111-1111-4111-8111-111111111111
   "templateVersionId": {{templateVersionId}},
   "title": "Seguimiento mensual",
   "documentDate": "2026-12-01",
-  "solutionCenterCode": "R01",
+  "solutionCenterCode": "{{solutionCenterCode}}",
   "sections": [
     {"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-01","hora":"10:00","lugar":"Bogotá"}}
   ],
@@ -80,6 +141,7 @@ Idempotency-Key: 11111111-1111-4111-8111-111111111111
 }
 
 ### Acta presencial. Reserva simulada: integration.state=SIMULADO, ninguna reserva real confirmada.
+# Requiere ACTAS_GESTION. notifications.state=SIMULADO, smtpAccepted=false; ningún correo enviado.
 POST {{baseUrl}}/api/v1/actas
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -89,7 +151,7 @@ Idempotency-Key: 22222222-2222-4222-8222-222222222222
   "templateVersionId": {{templateVersionId}},
   "title": "Seguimiento presencial",
   "documentDate": "2026-12-01",
-  "solutionCenterCode": "R01",
+  "solutionCenterCode": "{{solutionCenterCode}}",
   "sections": [{"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-01","hora":"10:00","lugar":"Sala principal"}}],
   "participants": [{"userName":"Persona de prueba","email":"person@example.invalid","participantType":"EXTERNO","userLogin":null}],
   "meeting": {
@@ -102,7 +164,10 @@ Idempotency-Key: 22222222-2222-4222-8222-222222222222
   }
 }
 
-### Acta virtual. Usar solo con Mode=Simulated; direcciones de ejemplo sin destinatarios reales.
+### Acta virtual. Requiere ACTAS_GESTION. No genera calendario ni enlaces Teams.
+# Con Smtp:Enabled=false: integration=null, notifications.state=SIMULADO, smtpAccepted=false.
+# Un error SMTP posterior no revierte el acta: 201 y notifications con ERROR/INCIERTO/PARCIAL.
+# ENVIADO significa aceptación SMTP, no entrega final al destinatario.
 POST {{baseUrl}}/api/v1/actas
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -112,8 +177,8 @@ Idempotency-Key: 33333333-3333-4333-8333-333333333333
   "templateVersionId": {{templateVersionId}},
   "title": "Seguimiento virtual",
   "documentDate": "2026-12-01",
-  "solutionCenterCode": "R01",
-  "sections": [{"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-01","hora":"10:00","lugar":"Microsoft Teams"}}],
+  "solutionCenterCode": "{{solutionCenterCode}}",
+  "sections": [{"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-01","hora":"10:00","lugar":"Reunión virtual"}}],
   "participants": [{"userName":"Persona de prueba","email":"person@example.invalid","participantType":"EXTERNO","userLogin":null}],
   "meeting": {
     "modality": "VIRTUAL",

@@ -7,8 +7,11 @@ public sealed class SimulatedRoomReservationProvider : IRoomReservationProvider
     public Task<ProviderResult> ReserveAsync(MeetingIntegrationRequest request, CancellationToken ct) =>
         Task.FromResult(new ProviderResult($"SIMULATED:{request.IdempotencyKey}", true));
 }
-public sealed class SimulatedCalendarProvider : IMeetingCalendarProvider
+public sealed class SimulatedNotificationSender : IMeetingNotificationSender
 {
-    public Task<ProviderResult> SynchronizeAsync(MeetingIntegrationRequest request, CancellationToken ct) =>
-        Task.FromResult(new ProviderResult($"SIMULATED:{request.IdempotencyKey}", true));
+    public Task<NotificationReceipt> SendAsync(Meetings.Domain.Models.Actas.MeetingNotification notification, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new NotificationReceipt(true));
+    }
 }
