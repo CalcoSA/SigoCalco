@@ -5,6 +5,7 @@
 @templateSectionId = 1
 @actaTypeId = 1
 @solutionCenterCode = REEMPLAZAR_POR_CENTRO_ASIGNADO
+@permissionKey = ACTAS_GESTION
 
 # Usar exclusivamente con Smtp:Enabled=false e Integrations:Reservations:Mode=Simulated.
 # Sustituir IDs por los devueltos por la API. Tipos actuales: 1 REUNION y 3 ADMINISTRATIVA.
@@ -14,6 +15,64 @@
 # 401 sin JWT: {"isSuccess":false,"message":"Se requiere un JWT válido y vigente.","result":null}
 # 403 con JWT sin permiso: {"isSuccess":false,"message":"<motivo de autorización>","result":null}
 # Ningún ejemplo contiene tokens reales. No ejecutar envíos reales con estos destinatarios.
+
+### Consultar permisos: únicamente Administrador validado contra Authentication. 200; sin body.
+# GET: result es un arreglo de {permissionId,permissionKey,roles}; un valor vacío/NULL produce roles: [].
+# Sin JWT válido: 401. Usuario sin rol real Administrador: 403, incluso para GET.
+GET {{baseUrl}}/api/v1/permissions
+Authorization: Bearer {{token}}
+
+### Agregar un rol existente. 200; conserva roles anteriores. Repetido: 409.
+# Ejecutar manualmente este POST cambia la asignación del permiso indicado.
+# Las pruebas automatizadas de esta entrega NO ejecutan escrituras de permisos en bdcalco_sigocalco.
+# Ejemplo 200: {"isSuccess":true,"message":"Rol agregado correctamente.",
+# "result":{"permissionId":36,"permissionKey":"ACTAS_GESTION","roles":["Administrador"]}}
+POST {{baseUrl}}/api/v1/permissions/{{permissionKey}}/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roleName":"Administrador"}
+
+### Reemplazar la lista completa de roles. 200; conserva ID y clave. Solo Administrador.
+# Para varios roles: {"roles":["Administrador","OTRO_ROL_EXISTENTE"]}; todos deben existir y estar activos.
+# Actualmente el catálogo real solo contiene Administrador. No utilizar nombres ficticios como concesiones.
+# PUT simultáneos se serializan; la última sustitución confirmada es la lista vigente.
+# Ejemplo 200: {"isSuccess":true,"message":"Roles actualizados correctamente.",
+# "result":{"permissionId":36,"permissionKey":"ACTAS_GESTION","roles":["Administrador"]}}
+PUT {{baseUrl}}/api/v1/permissions/{{permissionKey}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roles":["Administrador"]}
+
+### Vaciar un permiso: 200 con roles: []. No cambia la política administrativa.
+PUT {{baseUrl}}/api/v1/permissions/{{permissionKey}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roles":[]}
+
+### Error de rol inexistente: 400 y ninguna escritura parcial
+# {"isSuccess":false,"message":"Uno de los roles no existe, está inactivo o es ambiguo en Authentication.","result":null}
+POST {{baseUrl}}/api/v1/permissions/{{permissionKey}}/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roleName":"ROL_INEXISTENTE_DE_EJEMPLO"}
+
+### Error de duplicados en la lista completa: 400; la comparación ignora espacios externos y mayúsculas
+PUT {{baseUrl}}/api/v1/permissions/{{permissionKey}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roles":["Administrador"," ADMINISTRADOR "]}
+
+### Error de permiso inexistente: 404. No crea una séptima clave.
+POST {{baseUrl}}/api/v1/permissions/PERMISO_INEXISTENTE/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"roleName":"Administrador"}
 
 ### Catálogo: 200. Datos en result; isSuccess y message en todas las respuestas.
 GET {{baseUrl}}/api/v1/acta-types

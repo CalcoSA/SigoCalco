@@ -21,7 +21,7 @@ public static class MeetingsPermissions
     public static readonly string[] ActiveTypeCodes = ["REUNION", "ADMINISTRATIVA"];
     public static string NormalizeRole(string value) => value.Trim().Normalize(NormalizationForm.FormKC).ToUpperInvariant();
     public static bool Allowed(IReadOnlyDictionary<string, string> permissions, MeetingsIdentity actor, string key) =>
-        permissions.TryGetValue(key, out var value) && value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        permissions.TryGetValue(key, out var value) && (value ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(NormalizeRole).Intersect(actor.Roles.Select(NormalizeRole), StringComparer.Ordinal).Any();
     public static TemplateVisibility Visibility(IReadOnlyDictionary<string, string> permissions, MeetingsIdentity actor)
     {

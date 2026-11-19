@@ -25,6 +25,7 @@ public static class InfrastructureExtensions
             options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 46)));
         });
         services.AddScoped<Meetings.Application.Interfaces.ITemplateStore, TemplateStore>();
+        services.AddScoped<Meetings.Application.Interfaces.IPermissionStore, PermissionStore>();
         services.AddScoped<Meetings.Application.Interfaces.IActaStore, ActaStore>();
         services.AddScoped<Meetings.Application.Interfaces.IMeetingIntegrationService, Services.MeetingIntegrationService>();
         services.AddScoped<Meetings.Application.Interfaces.IMeetingNotificationService, Services.MeetingNotificationService>();
