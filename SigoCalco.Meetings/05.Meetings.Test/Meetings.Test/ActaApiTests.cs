@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Meetings.Application.Dtos;
 using Meetings.Application.Interfaces;
+using Meetings.Application.Services;
 using Meetings.Domain.Models.Actas;
 using Meetings.Infrastructure.Persistence.Data;
 using Meetings.Infrastructure.Persistence.Repositories;
@@ -21,7 +22,7 @@ public sealed class ActaApiTests
             var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
             db.Add(new ActaStatus { Name = "BORRADOR" });
             db.Add(new MeetingStatus { Name = "PROGRAMADA" });
-            if (grant) db.Add(new MeetingsPermission { PermissionKey = $"ACTA_{new[] { "REUNION", "DISCIPLINARIA", "ADMINISTRATIVA" }[type - 1]}_CREACION", PermissionValue = "Administrador" });
+            if (grant) (await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == MeetingsPermissions.ActasManage)).PermissionValue = "Administrador";
             await db.SaveChangesAsync();
         }
         using var templateResponse = await client.PostAsJsonAsync("/api/v1/templates", new CreateTemplateDto(type, "Plantilla", scopeName, scopeName == "CENTRO" ? "R01" : null));
@@ -54,6 +55,7 @@ public sealed class ActaApiTests
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var result = (await first.Content.ReadResultAsync<CreatedActaDto>())!;
         Assert.Null(result.MeetingId); Assert.Null(result.Integration);
+        Assert.Null(result.Notifications);
         using var duplicate = await SendAsync(client, input, key);
         await AssertFailure(duplicate, HttpStatusCode.Conflict);
         using var second = await SendAsync(client, input with { Participants = [new("Changed name", "PERSON@EXAMPLE.INVALID"), new("New person", "new@example.invalid")] });
@@ -66,6 +68,7 @@ public sealed class ActaApiTests
         Assert.All(await db.Set<Acta>().ToArrayAsync(), a => Assert.Equal(1, a.CreatedByUser));
         Assert.Empty(await db.Set<ScheduledMeeting>().ToArrayAsync());
         Assert.Empty(await db.Set<MeetingReservation>().ToArrayAsync()); Assert.Empty(await db.Set<MeetingCalendar>().ToArrayAsync());
+        Assert.Empty(await db.Set<MeetingNotification>().ToArrayAsync());
     }
 
     [Theory]
@@ -78,26 +81,28 @@ public sealed class ActaApiTests
         using var response = await SendAsync(client, input);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = (await response.Content.ReadResultAsync<CreatedActaDto>())!;
-        Assert.True(result.MeetingId > 0); Assert.True(result.Integration!.Simulated);
-        Assert.Equal("SIMULADO", result.Integration.State); Assert.Null(result.Integration.TeamsJoinUrl);
+        Assert.True(result.MeetingId > 0);
+        Assert.Equal("SIMULADO", result.Notifications!.State); Assert.True(result.Notifications.Simulated); Assert.False(result.Notifications.SmtpAccepted);
         using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
         var meeting = await db.Set<ScheduledMeeting>().SingleAsync();
         Assert.Equal(result.ActaId, meeting.ActaId); Assert.Equal(1, meeting.OrganizerUserId);
         Assert.Equal(15, meeting.StartAtUtc.Hour);
         if (modality == "PRESENCIAL")
         {
+            Assert.True(result.Integration!.Simulated); Assert.Equal("SIMULADO", result.Integration.State);
             var reservation = await db.Set<MeetingReservation>().SingleAsync();
             Assert.Equal("SOLICITADA", reservation.ReservationStatus); Assert.Null(reservation.SynchronizedAt);
             Assert.Empty(await db.Set<MeetingCalendar>().ToArrayAsync());
         }
         else
         {
-            var calendar = await db.Set<MeetingCalendar>().SingleAsync();
-            Assert.Equal("PENDIENTE", calendar.SyncStatus); Assert.Null(calendar.TeamsJoinUrl); Assert.Null(calendar.SynchronizedAt);
+            Assert.Null(result.Integration);
+            Assert.Empty(await db.Set<MeetingCalendar>().ToArrayAsync());
             Assert.Empty(await db.Set<MeetingReservation>().ToArrayAsync());
         }
         var retry = await scope.ServiceProvider.GetRequiredService<IMeetingIntegrationService>().SynchronizeAsync(meeting.MeetingId, default);
-        Assert.Equal(result.Integration, retry);
+        if (modality == "PRESENCIAL") Assert.Equal(result.Integration, retry);
+        else Assert.Equal("NO_APLICA", retry.State);
     }
 
     [Theory]
@@ -140,7 +145,7 @@ public sealed class ActaApiTests
 
     [Theory]
     [InlineData(1, "CENTRO")]
-    [InlineData(2, "GLOBAL")]
+    [InlineData(3, "GLOBAL")]
     [InlineData(3, "CENTRO")]
     public async Task Respects_type_and_center_creation_permissions(int type, string scopeName)
     {
@@ -152,14 +157,13 @@ public sealed class ActaApiTests
 
     [Theory]
     [InlineData("PRESENCIAL")]
-    [InlineData("VIRTUAL")]
     public async Task Integration_failure_preserves_local_commit_and_allows_controlled_recovery(string modality)
     {
         var provider = new RecoverableProvider();
         using var factory = new MeetingsApiFactory { Customize = services =>
         {
-            services.RemoveAll<IRoomReservationProvider>(); services.RemoveAll<IMeetingCalendarProvider>();
-            services.AddSingleton<IRoomReservationProvider>(provider); services.AddSingleton<IMeetingCalendarProvider>(provider);
+            services.RemoveAll<IRoomReservationProvider>();
+            services.AddSingleton<IRoomReservationProvider>(provider);
         } };
         using var client = factory.Client();
         provider.Factory = factory;
@@ -167,7 +171,7 @@ public sealed class ActaApiTests
         using var response = await SendAsync(client, input);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = (await response.Content.ReadResultAsync<CreatedActaDto>())!;
-        Assert.Equal("ERROR", result.Integration!.State); Assert.Null(result.Integration.TeamsJoinUrl);
+        Assert.Equal("ERROR", result.Integration!.State);
         using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
         Assert.Single(await db.Set<Acta>().ToArrayAsync()); Assert.Single(await db.Set<MeetingsLog>().ToArrayAsync());
         provider.Fail = false;
@@ -180,7 +184,7 @@ public sealed class ActaApiTests
         Assert.Equal("SIMULADO", (await service.SynchronizeAsync(result.MeetingId.Value, default)).State);
         Assert.Equal(2, provider.Calls);
     }
-    private sealed class RecoverableProvider : IRoomReservationProvider, IMeetingCalendarProvider
+    private sealed class RecoverableProvider : IRoomReservationProvider
     {
         public bool Fail = true; public int Calls; public MeetingsApiFactory Factory = null!;
         public Task<ProviderResult> ReserveAsync(MeetingIntegrationRequest request, CancellationToken ct) => SynchronizeAsync(request, ct);
@@ -197,42 +201,6 @@ public sealed class ActaApiTests
     }
 
     [Fact]
-    public async Task Calendar_event_id_and_pending_join_url_are_persisted_and_recovered_without_recreation()
-    {
-        var provider = new PendingCalendarProvider();
-        using var factory = new MeetingsApiFactory { Customize = services =>
-        {
-            services.RemoveAll<IMeetingCalendarProvider>(); services.AddSingleton<IMeetingCalendarProvider>(provider);
-        } };
-        using var client = factory.Client();
-        var input = (await PrepareAsync(factory, client)) with { Meeting = Meeting("VIRTUAL") };
-        using var response = await SendAsync(client, input);
-        var result = (await response.Content.ReadResultAsync<CreatedActaDto>())!;
-        Assert.Equal("PENDIENTE", result.Integration!.State); Assert.Equal("test-event", result.Integration.ExternalId);
-        Assert.Null(result.Integration.TeamsJoinUrl);
-        using var scope = factory.Services.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<IMeetingIntegrationService>();
-        var recovered = await service.SynchronizeAsync(result.MeetingId!.Value, default);
-        Assert.Equal("SINCRONIZADO", recovered.State); Assert.Equal("https://teams.microsoft.com/test-response-only", recovered.TeamsJoinUrl);
-        await service.SynchronizeAsync(result.MeetingId.Value, default);
-        Assert.Equal(2, provider.Calls);
-        var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
-        var calendar = await db.Set<MeetingCalendar>().SingleAsync();
-        Assert.Equal("test-event", calendar.ExternalEventId); Assert.NotNull(calendar.SynchronizedAt); Assert.Null(calendar.LastError);
-    }
-    private sealed class PendingCalendarProvider : IMeetingCalendarProvider
-    {
-        public int Calls;
-        public Task<ProviderResult> SynchronizeAsync(MeetingIntegrationRequest request, CancellationToken ct)
-        {
-            Calls++;
-            if (Calls == 1) { Assert.Null(request.ExternalId); return Task.FromResult(new ProviderResult("test-event", false)); }
-            Assert.Equal("test-event", request.ExternalId);
-            return Task.FromResult(new ProviderResult("test-event", false, "https://teams.microsoft.com/test-response-only"));
-        }
-    }
-
-    [Fact]
     public async Task Database_error_rolls_back_acta_sections_and_participants()
     {
         using var factory = new MeetingsApiFactory(); using var client = factory.Client();
@@ -244,7 +212,7 @@ public sealed class ActaApiTests
         var meeting = new ScheduledMeeting { Modality = "VIRTUAL", StartAtUtc = DateTime.UtcNow, EndAtUtc = DateTime.UtcNow.AddHours(-1), OrganizerUserId = 1 };
         await Assert.ThrowsAsync<DbUpdateException>(() => new ActaStore(db).CreateAsync(new NewActa(acta,
             [new() { TemplateVersionId = input.TemplateVersionId, TemplateSectionId = input.Sections![0].TemplateSectionId }],
-            [new() { UserName = "X", Email = "rollback@example.invalid", ParticipantType = "EXTERNO" }], meeting, null, "simulated@example.invalid"), default));
+            [new() { UserName = "X", Email = "rollback@example.invalid", ParticipantType = "EXTERNO" }], meeting, null, []), default));
         Assert.Empty(await db.Set<Acta>().ToArrayAsync()); Assert.Empty(await db.Set<ActaSection>().ToArrayAsync());
         Assert.Empty(await db.Set<Participant>().ToArrayAsync()); Assert.Empty(await db.Set<ActaParticipant>().ToArrayAsync());
     }

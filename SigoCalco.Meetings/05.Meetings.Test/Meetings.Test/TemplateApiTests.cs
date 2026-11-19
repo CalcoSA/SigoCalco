@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Meetings.Application.Dtos;
+using Meetings.Application.Services;
 using Meetings.Domain.Models.Actas;
 using Meetings.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,10 @@ public sealed class TemplateApiTests
     [InlineData("/api/v1/templates", "GET")]
     [InlineData("/api/v1/templates", "POST")]
     [InlineData("/api/v1/templates/1/versions", "POST")]
+    [InlineData("/api/v1/templates/with-version", "POST")]
+    [InlineData("/api/v1/templates/1/versions", "GET")]
+    [InlineData("/api/v1/template-versions/1", "GET")]
+    [InlineData("/api/v1/templates/1", "PUT")]
     public async Task Endpoints_require_authentication(string path, string method)
     {
         using var factory = new MeetingsApiFactory();
@@ -61,7 +66,7 @@ public sealed class TemplateApiTests
         using var factory = new MeetingsApiFactory();
         using var client = factory.Client();
         var types = await client.GetResultAsync<ActaTypeDto[]>("/api/v1/acta-types");
-        Assert.Equal(3, types!.Length);
+        Assert.Equal(new[] { 1, 3 }, types!.Select(t => t.ActaTypeId));
         var id = await Create(client);
         for (var number = 1; number <= 2; number++)
         {
@@ -88,6 +93,7 @@ public sealed class TemplateApiTests
 
     [Theory]
     [InlineData(2, "CENTRO", "R01", HttpStatusCode.BadRequest)]
+    [InlineData(2, "GLOBAL", null, HttpStatusCode.BadRequest)]
     [InlineData(1, "GLOBAL", "R01", HttpStatusCode.BadRequest)]
     [InlineData(1, "CENTRO", null, HttpStatusCode.BadRequest)]
     [InlineData(1, "CENTRO", "R02", HttpStatusCode.Forbidden)]
@@ -128,7 +134,8 @@ public sealed class TemplateApiTests
         {
             var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
             db.Add(new Template { ActaTypeId = 1, Name = "Other center", Scope = "CENTRO", SolutionCenterCode = "R02", CreatedByUser = 9, CreatedAt = DateTime.UtcNow });
-            db.Remove(await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == "ACTA_REUNION_VERSION_CREACION"));
+            (await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == MeetingsPermissions.GlobalManage)).PermissionValue = "";
+            (await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == MeetingsPermissions.GlobalRead)).PermissionValue = "Administrador";
             await db.SaveChangesAsync();
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/v1/templates/{id}/versions", Version())).StatusCode);
@@ -136,7 +143,7 @@ public sealed class TemplateApiTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
-            db.Add(new MeetingsPermission { PermissionKey = "VIEW_ALL_SOLUTION_CENTERS", PermissionValue = " ADMINISTRADOR, COSTOS " });
+            (await db.Set<MeetingsPermission>().SingleAsync(p => p.PermissionKey == MeetingsPermissions.GlobalManage)).PermissionValue = " ADMINISTRADOR ";
             await db.SaveChangesAsync();
         }
         Assert.Equal(2, (await client.GetResultAsync<PagedTemplatesDto>("/api/v1/templates"))!.Items.Count);

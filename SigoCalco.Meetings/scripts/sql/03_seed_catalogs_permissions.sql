@@ -1,15 +1,13 @@
+-- Current seeds for a fresh installation; existing databases use 05_six_permissions_and_active_types.sql.
 -- Idempotent seeds. Existing permission values are never overwritten.
 -- Session-only encoding; does not alter the shared database's default collation.
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 START TRANSACTION;
-INSERT INTO sigocalco_meetings_acta_type (code, name)
-SELECT 'REUNION', 'Acta de reunión'
+INSERT INTO sigocalco_meetings_acta_type (acta_type_id, code, name)
+SELECT 1, 'REUNION', 'Acta de reunión'
 WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_acta_type WHERE code = 'REUNION');
-INSERT INTO sigocalco_meetings_acta_type (code, name)
-SELECT 'DISCIPLINARIA', 'Acta disciplinaria'
-WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_acta_type WHERE code = 'DISCIPLINARIA');
-INSERT INTO sigocalco_meetings_acta_type (code, name)
-SELECT 'ADMINISTRATIVA', 'Acta administrativa'
+INSERT INTO sigocalco_meetings_acta_type (acta_type_id, code, name)
+SELECT 3, 'ADMINISTRATIVA', 'Acta administrativa'
 WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_acta_type WHERE code = 'ADMINISTRATIVA');
 
 INSERT INTO sigocalco_meetings_acta_status (name)
@@ -22,28 +20,21 @@ INSERT INTO sigocalco_meetings_meeting_status (name)
 SELECT s.name FROM (SELECT 'PROGRAMADA' AS name UNION ALL SELECT 'REALIZADA' UNION ALL SELECT 'CANCELADA') s
 WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_meeting_status existing WHERE existing.name = s.name);
 
--- Nine explicitly approved grants, based on the real active Authentication role (SELECT only).
+-- Explicit assignments authorized for this delivery, using existing active Authentication roles (SELECT only).
 INSERT INTO sigocalco_meetings_permission (permission_key, permission_value)
-SELECT CONCAT('ACTA_', t.code, '_', op.operation), r.nameRole
-FROM sigocalco_meetings_acta_type t
-CROSS JOIN (SELECT 'PLANTILLA_CREACION' AS operation UNION ALL SELECT 'PLANTILLA_LECTURA' UNION ALL SELECT 'VERSION_CREACION') op
-JOIN sigocalco_authentication_role r ON UPPER(TRIM(r.nameRole)) = 'ADMINISTRADOR' AND r.statusRole = 1
-WHERE t.code IN ('REUNION', 'DISCIPLINARIA', 'ADMINISTRATIVA')
-AND NOT EXISTS (
-    SELECT 1 FROM sigocalco_meetings_permission p WHERE p.permission_key = CONCAT('ACTA_', t.code, '_', op.operation)
-);
+SELECT 'PLANTILLAS_GLOBALES_GESTION', COALESCE((
+    SELECT GROUP_CONCAT(TRIM(nameRole) ORDER BY IdRole SEPARATOR ',') FROM sigocalco_authentication_role
+    WHERE UPPER(TRIM(nameRole)) = 'ADMINISTRADOR' AND statusRole = 1), '')
+WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_permission WHERE permission_key = 'PLANTILLAS_GLOBALES_GESTION');
+INSERT INTO sigocalco_meetings_permission (permission_key, permission_value)
+SELECT 'PLANTILLAS_CENTRO_GESTION', COALESCE((
+    SELECT GROUP_CONCAT(TRIM(nameRole) ORDER BY IdRole SEPARATOR ',') FROM sigocalco_authentication_role
+    WHERE UPPER(TRIM(nameRole)) IN ('ADMINISTRADOR', 'ADMINISTRADOR CENTRO') AND statusRole = 1), '')
+WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_permission WHERE permission_key = 'PLANTILLAS_CENTRO_GESTION');
+INSERT INTO sigocalco_meetings_permission (permission_key, permission_value)
+SELECT required.permission_key, '' FROM (
+    SELECT 'PLANTILLAS_GLOBALES_LECTURA' AS permission_key UNION ALL SELECT 'PLANTILLAS_CENTRO_LECTURA'
+    UNION ALL SELECT 'ACTAS_GESTION' UNION ALL SELECT 'ACTAS_LECTURA'
+) required WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_permission p WHERE p.permission_key = required.permission_key);
 
--- General acta permissions and cross-center visibility start denied.
-INSERT INTO sigocalco_meetings_permission (permission_key, permission_value)
-SELECT CONCAT('ACTA_', t.code, '_', op.operation), ''
-FROM sigocalco_meetings_acta_type t
-CROSS JOIN (SELECT 'CREACION' AS operation UNION ALL SELECT 'LECTURA' UNION ALL SELECT 'EDICION') op
-WHERE t.code IN ('REUNION', 'DISCIPLINARIA', 'ADMINISTRATIVA')
-AND NOT EXISTS (
-    SELECT 1 FROM sigocalco_meetings_permission p WHERE p.permission_key = CONCAT('ACTA_', t.code, '_', op.operation)
-);
-INSERT INTO sigocalco_meetings_permission (permission_key, permission_value)
-SELECT 'VIEW_ALL_SOLUTION_CENTERS', ''
-WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_permission WHERE permission_key = 'VIEW_ALL_SOLUTION_CENTERS');
 COMMIT;
-

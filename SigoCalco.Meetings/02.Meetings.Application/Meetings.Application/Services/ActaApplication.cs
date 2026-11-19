@@ -8,7 +8,8 @@ using Meetings.Domain.Models.Actas;
 namespace Meetings.Application.Services;
 
 public sealed class ActaApplication(IActaStore store, ITemplateStore templates, IMeetingsIdentity identity,
-    SectionJsonValidator json, IMeetingIntegrationService integrations, CalendarOptions options) : IActaApplication
+    SectionJsonValidator json, IMeetingIntegrationService integrations, MeetingNotificationComposer composer,
+    IMeetingNotificationService notifications) : IActaApplication
 {
     public async Task<CreatedActaDto> CreateAsync(CreateActaDto input, string? idempotencyKey, CancellationToken ct)
     {
@@ -18,15 +19,14 @@ public sealed class ActaApplication(IActaStore store, ITemplateStore templates, 
         var source = await store.FindVersionAsync(input.TemplateVersionId, ct)
             ?? throw MeetingsRequestException.NotFound("No se encontró la versión de plantilla.");
         var template = source.Template;
-        if (!TemplateApplication.Allowed(await templates.GetPermissionsAsync(ct), actor,
-                TemplateApplication.Key(template.ActaType.Code, "CREACION")))
+        if (!MeetingsPermissions.ActiveTypeCodes.Contains(template.ActaType.Code))
+            throw MeetingsRequestException.Invalid("El tipo de acta ya no está vigente.");
+        if (!MeetingsPermissions.Allowed(await templates.GetPermissionsAsync(ct), actor, MeetingsPermissions.ActasManage))
             throw MeetingsRequestException.Forbidden();
         var center = Text(input.SolutionCenterCode, 64, "solutionCenterCode").ToUpperInvariant();
         if (!actor.CenterCodes.Contains(center, StringComparer.OrdinalIgnoreCase) ||
             (template.Scope == "CENTRO" && !string.Equals(template.SolutionCenterCode, center, StringComparison.OrdinalIgnoreCase)))
             throw MeetingsRequestException.Forbidden();
-        if (template.ActaType.Code == "DISCIPLINARIA" && template.Scope != "GLOBAL")
-            throw MeetingsRequestException.Invalid("Las actas disciplinarias requieren una plantilla GLOBAL.");
         if (input.DocumentDate == default) throw MeetingsRequestException.Invalid("documentDate es obligatorio.");
         var title = Text(input.Title, 250, "title");
         if (input.Sections is null || input.Sections.Count > 100 || input.Sections.Any(s => s is null) ||
@@ -66,7 +66,7 @@ public sealed class ActaApplication(IActaStore store, ITemplateStore templates, 
         }
         var now = DateTime.UtcNow;
         ScheduledMeeting? meeting = null;
-        string? room = null, organizer = null;
+        string? room = null;
         if (input.Meeting is { } m)
         {
             var modality = m.Modality?.Trim().ToUpperInvariant();
@@ -82,17 +82,20 @@ public sealed class ActaApplication(IActaStore store, ITemplateStore templates, 
             if (modality == "PRESENCIAL" && location is null && room is null)
                 throw MeetingsRequestException.Invalid("Una reunión presencial requiere lugar o sala.");
             if (modality == "VIRTUAL" && room is not null) throw MeetingsRequestException.Invalid("Una reunión virtual no admite reserva de sala.");
-            if (modality == "VIRTUAL") organizer = Email(options.OrganizerEmail);
             meeting = new ScheduledMeeting { Modality = modality, StartAtUtc = m.StartAt.UtcDateTime, EndAtUtc = m.EndAt.UtcDateTime,
                 TimeZone = zone, LocationDescription = location, OrganizerUserId = actor.UserId, CreatedAt = now, UpdatedAt = now };
         }
         var acta = new Acta { ActaCode = $"ACT-{key:N}", ActaTypeId = template.ActaTypeId,
             TemplateVersionId = source.Version.TemplateVersionId, Title = title, DocumentDate = input.DocumentDate,
             SolutionCenterCode = center, CreatedByUser = actor.UserId, CreatedAt = now, UpdatedAt = now };
-        var result = await store.CreateAsync(new NewActa(acta, sections, participants, meeting, room, organizer), ct);
+        var drafts = composer.Compose(acta, meeting, participants, actor);
+        var result = await store.CreateAsync(new NewActa(acta, sections, participants, meeting, room, drafts), ct);
         // Local commit precedes external work. A cancelled request leaves durable pending work for operator recovery.
         if (result.MeetingId is { } meetingId)
-            result = result with { Integration = await integrations.SynchronizeAsync(meetingId, ct) };
+        {
+            if (result.Modality == "PRESENCIAL") result = result with { Integration = await integrations.SynchronizeAsync(meetingId, ct) };
+            result = result with { Notifications = await notifications.SendForMeetingAsync(meetingId, ct) };
+        }
         return result;
     }
     private static string Text(string? value, int max, string field) =>

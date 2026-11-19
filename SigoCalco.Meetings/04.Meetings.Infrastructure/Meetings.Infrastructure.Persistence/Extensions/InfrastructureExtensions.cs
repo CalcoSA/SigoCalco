@@ -27,6 +27,7 @@ public static class InfrastructureExtensions
         services.AddScoped<Meetings.Application.Interfaces.ITemplateStore, TemplateStore>();
         services.AddScoped<Meetings.Application.Interfaces.IActaStore, ActaStore>();
         services.AddScoped<Meetings.Application.Interfaces.IMeetingIntegrationService, Services.MeetingIntegrationService>();
+        services.AddScoped<Meetings.Application.Interfaces.IMeetingNotificationService, Services.MeetingNotificationService>();
         services.AddSingleton<Meetings.Application.Interfaces.IRoomReservationProvider, Services.SimulatedRoomReservationProvider>();
         services.AddScoped<Meetings.Application.Interfaces.IAuthenticationDirectory, Services.AuthenticationDirectory>();
 

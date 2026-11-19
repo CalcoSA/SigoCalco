@@ -16,5 +16,5 @@ public sealed class ActasController(IActaApplication application) : ControllerBa
     public async Task<IActionResult> Create([FromBody] CreateActaDto request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey, CancellationToken ct) =>
         StatusCode(StatusCodes.Status201Created, ApiResponse.Success(await application.CreateAsync(request, idempotencyKey, ct),
-            "Acta creada. Consulte integration para conocer el estado externo; una simulación no envía invitaciones ni confirma reservas."));
+            "Acta creada. Consulte integration y notifications: una simulación no envía correos ni confirma reservas; ENVIADO indica aceptación SMTP, no entrega final."));
 }

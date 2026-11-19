@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Meetings.Application.Dtos;
 using Meetings.Application.Interfaces;
@@ -16,16 +15,16 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
     }
 
     public async Task<CreatedTemplateDto> CreateAsync(CreateTemplateDto request, CancellationToken ct)
+        => new(await store.CreateAsync(await BuildTemplateAsync(request, ct), ct));
+
+    private async Task<Template> BuildTemplateAsync(CreateTemplateDto request, CancellationToken ct)
     {
         var actor = await identity.GetAsync(ct);
         var type = (await store.GetTypesAsync(ct)).SingleOrDefault(t => t.ActaTypeId == request.ActaTypeId)
             ?? throw MeetingsRequestException.Invalid("El tipo de acta no existe.");
         var name = RequiredText(request.Name, 200, "name");
         var scope = NormalizeScope(request.Scope);
-        if (type.Code == "DISCIPLINARIA" && scope != "GLOBAL")
-            throw MeetingsRequestException.Invalid("Las plantillas disciplinarias solo admiten alcance GLOBAL.");
         var permissions = await store.GetPermissionsAsync(ct);
-        RequirePermission(permissions, actor, Key(type.Code, "PLANTILLA_CREACION"));
         string? center = null;
         if (scope == "GLOBAL")
         {
@@ -34,27 +33,47 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
         else
         {
             center = RequiredText(request.SolutionCenterCode, 64, "solutionCenterCode").ToUpperInvariant();
-            RequireCenter(actor, center);
         }
-        return new(await store.CreateAsync(new Template
+        var template = new Template
         {
             ActaTypeId = type.ActaTypeId, Name = name, Scope = scope, SolutionCenterCode = center,
             CreatedByUser = actor.UserId, CreatedAt = DateTime.UtcNow
-        }, ct));
+        };
+        MeetingsPermissions.RequireManage(template, permissions, actor);
+        return template;
+    }
+
+    public async Task<CreatedTemplateWithVersionDto> CreateWithVersionAsync(CreateTemplateWithVersionDto request, CancellationToken ct)
+    {
+        var template = await BuildTemplateAsync(new(request.ActaTypeId, request.Name, request.Scope, request.SolutionCenterCode), ct);
+        template.Versions.Add(new TemplateVersion { ActaTypeId = template.ActaTypeId, VersionNumber = 1,
+            CreatedByUser = template.CreatedByUser, CreatedAt = template.CreatedAt, Sections = BuildSections(request.Sections) });
+        await store.CreateWithVersionAsync(template, ct);
+        var version = MapVersion(template.Versions.Single());
+        return new(template.TemplateId, version.TemplateVersionId, version.VersionNumber, version.Sections);
     }
 
     public async Task<TemplateVersionDto> CreateVersionAsync(int templateId, CreateTemplateVersionDto request, CancellationToken ct)
     {
         if (templateId <= 0) throw MeetingsRequestException.Invalid("templateId debe ser positivo.");
         var actor = await identity.GetAsync(ct);
-        var template = await store.FindAsync(templateId, ct) ?? throw MeetingsRequestException.NotFound("No se encontró la plantilla.");
-        RequirePermission(await store.GetPermissionsAsync(ct), actor, Key(template.ActaType.Code, "VERSION_CREACION"));
-        if (template.Scope == "CENTRO") RequireCenter(actor, template.SolutionCenterCode!);
-        if (request.Sections is null || request.Sections.Count is < 1 or > 100)
+        var template = await FindActiveTemplateAsync(templateId, ct);
+        MeetingsPermissions.RequireManage(template, await store.GetPermissionsAsync(ct), actor);
+        var version = await store.CreateVersionAsync(new TemplateVersion
+        {
+            TemplateId = templateId, ActaTypeId = template.ActaTypeId, CreatedByUser = actor.UserId,
+            CreatedAt = DateTime.UtcNow, Sections = BuildSections(request.Sections)
+        }, ct);
+        return MapVersion(version);
+    }
+
+    private List<TemplateSection> BuildSections(IReadOnlyList<CreateTemplateSectionDto>? requested)
+    {
+        if (requested is null || requested.Count is < 1 or > 100)
             throw MeetingsRequestException.Invalid("Se requieren entre 1 y 100 secciones.");
         var orders = new HashSet<int>();
         var sections = new List<TemplateSection>();
-        foreach (var section in request.Sections)
+        foreach (var section in requested)
         {
             if (section is null) throw MeetingsRequestException.Invalid("Una sección no puede ser nula.");
             if (section.SortOrder < 1 || !orders.Add(section.SortOrder))
@@ -70,12 +89,7 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
         }
         if (!orders.SetEquals(Enumerable.Range(1, sections.Count)))
             throw MeetingsRequestException.Invalid("sortOrder debe ser consecutivo desde 1.");
-        var version = await store.CreateVersionAsync(new TemplateVersion
-        {
-            TemplateId = templateId, ActaTypeId = template.ActaTypeId, CreatedByUser = actor.UserId,
-            CreatedAt = DateTime.UtcNow, Sections = sections.OrderBy(s => s.SortOrder).ToList()
-        }, ct);
-        return MapVersion(version);
+        return sections.OrderBy(s => s.SortOrder).ToList();
     }
 
     public async Task<PagedTemplatesDto> GetAsync(TemplateQuery query, CancellationToken ct)
@@ -86,29 +100,51 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
         var scope = query.Scope is null ? null : NormalizeScope(query.Scope);
         var actor = await identity.GetAsync(ct);
         var permissions = await store.GetPermissionsAsync(ct);
-        var readableTypes = (await store.GetTypesAsync(ct)).Where(t => Allowed(permissions, actor, Key(t.Code, "PLANTILLA_LECTURA")))
-            .Select(t => t.ActaTypeId).ToArray();
-        if (readableTypes.Length == 0 || (query.ActaTypeId.HasValue && !readableTypes.Contains(query.ActaTypeId.Value)))
-            throw MeetingsRequestException.Forbidden();
+        var readableTypes = (await store.GetTypesAsync(ct)).Select(t => t.ActaTypeId).ToArray();
+        if (query.ActaTypeId.HasValue && !readableTypes.Contains(query.ActaTypeId.Value))
+            throw MeetingsRequestException.Invalid("actaTypeId debe corresponder a un tipo vigente.");
+        var visibility = MeetingsPermissions.Visibility(permissions, actor);
+        if (!visibility.Any) throw MeetingsRequestException.Forbidden();
         var result = await store.GetAsync(query.Page, query.PageSize, query.ActaTypeId, scope,
-            readableTypes, actor.CenterCodes, Allowed(permissions, actor, "VIEW_ALL_SOLUTION_CENTERS"), ct);
+            readableTypes, actor.CenterCodes, visibility, ct);
         return new(result.Items.Select(t => new TemplateDto(t.TemplateId, t.ActaTypeId, t.Name, t.Scope, t.SolutionCenterCode,
             t.CreatedByUser, t.CreatedAt, t.Versions.OrderBy(v => v.VersionNumber).Select(MapVersion).ToArray())).ToArray(),
             query.Page, query.PageSize, result.TotalCount);
     }
 
-    public static string NormalizeRole(string value) => value.Trim().Normalize(NormalizationForm.FormKC).ToUpperInvariant();
-    public static string Key(string code, string operation) => $"ACTA_{code}_{operation}";
-    public static bool Allowed(IReadOnlyDictionary<string, string> permissions, MeetingsIdentity actor, string key) =>
-        permissions.TryGetValue(key, out var value) && value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(NormalizeRole).Intersect(actor.Roles.Select(NormalizeRole), StringComparer.Ordinal).Any();
-    private static void RequirePermission(IReadOnlyDictionary<string, string> permissions, MeetingsIdentity actor, string key)
+    private async Task<Template> FindActiveTemplateAsync(int id, CancellationToken ct)
     {
-        if (!Allowed(permissions, actor, key)) throw MeetingsRequestException.Forbidden();
+        if (id <= 0) throw MeetingsRequestException.Invalid("El identificador debe ser positivo.");
+        var template = await store.FindAsync(id, ct);
+        return template is not null && MeetingsPermissions.ActiveTypeCodes.Contains(template.ActaType.Code)
+            ? template : throw MeetingsRequestException.NotFound("No se encontró una plantilla vigente.");
     }
-    private static void RequireCenter(MeetingsIdentity actor, string center)
+    public async Task<IReadOnlyList<TemplateVersionDto>> GetVersionsAsync(int templateId, CancellationToken ct)
     {
-        if (!actor.CenterCodes.Contains(center, StringComparer.OrdinalIgnoreCase)) throw MeetingsRequestException.Forbidden();
+        var actor = await identity.GetAsync(ct);
+        var template = await FindActiveTemplateAsync(templateId, ct);
+        MeetingsPermissions.RequireRead(template, await store.GetPermissionsAsync(ct), actor);
+        return (await store.GetVersionsAsync(templateId, ct)).Select(MapVersion).ToArray();
+    }
+    public async Task<TemplateVersionDetailDto> GetVersionAsync(int templateVersionId, CancellationToken ct)
+    {
+        var actor = await identity.GetAsync(ct);
+        var version = await store.FindVersionAsync(templateVersionId, ct) ?? throw MeetingsRequestException.NotFound("No se encontró la versión.");
+        var template = await FindActiveTemplateAsync(version.TemplateId, ct);
+        MeetingsPermissions.RequireRead(template, await store.GetPermissionsAsync(ct), actor);
+        var dto = MapVersion(version);
+        return new(template.TemplateId, template.Name, template.ActaTypeId, template.ActaType.Name, template.Scope,
+            template.SolutionCenterCode, dto.TemplateVersionId, dto.VersionNumber, dto.CreatedByUser, dto.CreatedAt, dto.Sections);
+    }
+    public async Task<TemplateDto> UpdateAsync(int templateId, UpdateTemplateDto request, CancellationToken ct)
+    {
+        var actor = await identity.GetAsync(ct);
+        var template = await FindActiveTemplateAsync(templateId, ct);
+        MeetingsPermissions.RequireManage(template, await store.GetPermissionsAsync(ct), actor);
+        template.Name = RequiredText(request.Name, 200, "name");
+        await store.UpdateNameAsync(templateId, template.Name, ct);
+        return new(template.TemplateId, template.ActaTypeId, template.Name, template.Scope, template.SolutionCenterCode,
+            template.CreatedByUser, template.CreatedAt, (await store.GetVersionsAsync(templateId, ct)).Select(MapVersion).ToArray());
     }
     private static string NormalizeScope(string? value)
     {

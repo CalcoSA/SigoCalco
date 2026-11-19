@@ -110,6 +110,20 @@ public static class ActasModel
         calendar.HasIndex(x => x.MeetingId).IsUnique();
         calendar.HasOne<ScheduledMeeting>().WithOne().HasForeignKey<MeetingCalendar>(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
 
+        var notification = Table<MeetingNotification>(model, "meeting_notification", nameof(MeetingNotification.MeetingNotificationId));
+        Text(notification, nameof(MeetingNotification.RecipientEmail), 254);
+        Text(notification, nameof(MeetingNotification.RecipientName), 250);
+        Text(notification, nameof(MeetingNotification.MessageId), 200);
+        Text(notification, nameof(MeetingNotification.Subject), 300);
+        Text(notification, nameof(MeetingNotification.LastError), 500);
+        notification.Property(x => x.TextBody).HasColumnType("text");
+        notification.Property(x => x.HtmlBody).HasColumnType("text");
+        notification.Property(x => x.Status).HasColumnType("enum('PENDIENTE','PROCESANDO','ENVIADO','ERROR','INCIERTO','SIMULADO')").HasDefaultValue("PENDIENTE");
+        notification.HasIndex(x => new { x.MeetingId, x.RecipientEmail }).IsUnique();
+        notification.HasIndex(x => x.MessageId).IsUnique();
+        notification.HasIndex(x => new { x.Status, x.CreatedAt });
+        notification.HasOne<ScheduledMeeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
+
         var cp = Table<ActaCenterPermission>(model, "acta_center_permission", nameof(ActaCenterPermission.ActaCenterPermissionId));
         Text(cp, nameof(ActaCenterPermission.SolutionCenterCode), 64);
         cp.Property(x => x.Permission).HasColumnType("enum('LECTURA','EDICION')");

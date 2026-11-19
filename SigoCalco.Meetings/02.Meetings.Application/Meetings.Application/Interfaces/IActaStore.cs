@@ -5,7 +5,7 @@ namespace Meetings.Application.Interfaces;
 
 public sealed record ActaTemplate(Template Template, TemplateVersion Version);
 public sealed record NewActa(Acta Acta, IReadOnlyList<ActaSection> Sections, IReadOnlyList<Participant> Participants,
-    ScheduledMeeting? Meeting, string? RoomId, string? OrganizerEmail);
+    ScheduledMeeting? Meeting, string? RoomId, IReadOnlyList<MeetingNotification> Notifications);
 public interface IActaStore
 {
     Task<ActaTemplate?> FindVersionAsync(int versionId, CancellationToken ct);

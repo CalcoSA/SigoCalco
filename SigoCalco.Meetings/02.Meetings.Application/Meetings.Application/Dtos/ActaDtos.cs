@@ -10,5 +10,6 @@ public sealed record ParticipantInput(string UserName, string Email, string Part
 public sealed record MeetingInput(string Modality, DateTimeOffset StartAt, DateTimeOffset EndAt,
     string TimeZone, string? LocationDescription = null, string? ExternalRoomId = null);
 public sealed record IntegrationDto(string Provider, string State, bool Simulated, string? ExternalId = null,
-    string? TeamsJoinUrl = null, string? Error = null);
-public sealed record CreatedActaDto(int ActaId, string ActaCode, int? MeetingId, string? Modality, IntegrationDto? Integration);
+    string? Error = null);
+public sealed record CreatedActaDto(int ActaId, string ActaCode, int? MeetingId, string? Modality, IntegrationDto? Integration,
+    Meetings.Application.Interfaces.NotificationSummaryDto? Notifications = null);

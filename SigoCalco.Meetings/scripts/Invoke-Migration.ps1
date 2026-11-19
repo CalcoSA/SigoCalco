@@ -3,6 +3,7 @@ param(
     [string]$ApprovedPlanSha256,
     [string]$BackupDirectory
 )
+throw 'Migración histórica de sustitución retirada. Para la entrega de seis permisos/SMTP utilice Invoke-NextDelivery.ps1; no reconstruya las tablas existentes.'
 . (Join-Path $PSScriptRoot 'MySqlTools.ps1')
 $settings = Get-MeetingsMySqlSettings
 $manifestPath = Join-Path $PSScriptRoot 'migration-manifest.json'
