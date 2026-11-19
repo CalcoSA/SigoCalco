@@ -42,6 +42,8 @@ builder.Services.AddExceptionHandler<MeetingsExceptionHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<ITemplateApplication, TemplateApplication>();
+builder.Services.AddScoped<IPermissionApplication, PermissionApplication>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAdministrationHandler>();
 builder.Services.AddScoped<IActaApplication, ActaApplication>();
 builder.Services.AddSingleton<MeetingNotificationComposer>();
 builder.Services.AddSingleton(provider => provider.GetRequiredService<IConfiguration>().GetSection("Smtp").Get<SmtpOptions>() ?? new());
@@ -92,6 +94,8 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
 builder.Services.AddAuthorization(options =>
 {
     options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+    options.AddPolicy(PermissionAdministrationRequirement.Policy, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new PermissionAdministrationRequirement()));
 });
 
 var app = builder.Build();

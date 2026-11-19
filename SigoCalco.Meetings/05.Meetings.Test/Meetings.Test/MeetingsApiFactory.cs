@@ -36,6 +36,8 @@ public sealed class TestMeetingsContext(DbContextOptions<MeetingsDbContext> opti
 
 public sealed class StubDirectory : IAuthenticationDirectory
 {
+    // Fixture catalog only; no roles are created in Authentication.
+    public Task<IReadOnlyList<string>> GetActiveRoleNamesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(["Administrador", "Lector de prueba", "Operador de prueba"]);
     public Task<MeetingsIdentity> ResolveAsync(int userId, int roleId, string roleName, CancellationToken ct)
     {
         if (userId != 1 || roleId != 1 || roleName != "Administrador") throw MeetingsRequestException.Forbidden();

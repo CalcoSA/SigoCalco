@@ -27,5 +27,6 @@ public sealed class AuthenticationJwtCompatibilityTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/acta-types")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/templates")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/permissions")).StatusCode);
     }
 }

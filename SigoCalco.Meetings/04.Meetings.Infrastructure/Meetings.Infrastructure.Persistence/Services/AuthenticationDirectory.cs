@@ -10,6 +10,9 @@ namespace Meetings.Infrastructure.Persistence.Services;
 // Temporary shared-database adapter. SELECT only; no Authentication entities are mapped in EF.
 public sealed class AuthenticationDirectory(MeetingsDbContext context) : IAuthenticationDirectory
 {
+    public async Task<IReadOnlyList<string>> GetActiveRoleNamesAsync(CancellationToken ct) =>
+        await context.Database.SqlQueryRaw<string>("SELECT nameRole AS Value FROM sigocalco_authentication_role WHERE statusRole = 1 ORDER BY IdRole").ToListAsync(ct);
+
     public async Task<MeetingsIdentity> ResolveAsync(int userId, int roleId, string roleName, CancellationToken ct)
     {
         var connection = context.Database.GetDbConnection();

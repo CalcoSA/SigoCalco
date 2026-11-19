@@ -10,5 +10,6 @@ public interface IMeetingsIdentity
 public interface IAuthenticationDirectory
 {
     Task<MeetingsIdentity> ResolveAsync(int userId, int roleId, string roleName, CancellationToken ct);
+    Task<IReadOnlyList<string>> GetActiveRoleNamesAsync(CancellationToken ct);
 }
 
