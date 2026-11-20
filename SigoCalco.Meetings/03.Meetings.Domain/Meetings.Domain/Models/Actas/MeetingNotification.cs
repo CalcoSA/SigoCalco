@@ -1,10 +1,11 @@
 namespace Meetings.Domain.Models.Actas;
 
-// One durable notification per meeting/recipient. SMTP acceptance is not final delivery.
+// One durable creation notification per acta/recipient; the meeting is optional.
 public sealed class MeetingNotification
 {
     public long MeetingNotificationId { get; set; }
-    public int MeetingId { get; set; }
+    public int ActaId { get; set; }
+    public int? MeetingId { get; set; }
     public string RecipientEmail { get; set; } = "";
     public string RecipientName { get; set; } = "";
     public string MessageId { get; set; } = "";

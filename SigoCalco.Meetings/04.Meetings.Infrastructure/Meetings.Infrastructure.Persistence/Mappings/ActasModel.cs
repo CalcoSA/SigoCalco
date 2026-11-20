@@ -52,6 +52,7 @@ public static class ActasModel
         Text(acta, nameof(Acta.SolutionCenterCode), 64);
         acta.HasIndex(x => x.ActaCode).IsUnique();
         acta.HasIndex(x => new { x.SolutionCenterCode, x.CreatedByUser, x.DocumentDate });
+        acta.HasIndex(x => new { x.CreatedByUser, x.ActaId }).HasDatabaseName("IX_meetings_acta_owner_id");
         acta.HasAlternateKey(x => new { x.ActaId, x.TemplateVersionId });
         acta.HasOne<ActaType>().WithMany().HasForeignKey(x => x.ActaTypeId).OnDelete(DeleteBehavior.Restrict);
         acta.HasOne<TemplateVersion>().WithMany().HasForeignKey(x => new { x.TemplateVersionId, x.ActaTypeId })
@@ -120,9 +121,11 @@ public static class ActasModel
         notification.Property(x => x.HtmlBody).HasColumnType("text");
         notification.Property(x => x.Status).HasColumnType("enum('PENDIENTE','PROCESANDO','ENVIADO','ERROR','INCIERTO','SIMULADO')").HasDefaultValue("PENDIENTE");
         notification.HasIndex(x => new { x.MeetingId, x.RecipientEmail }).IsUnique();
+        notification.HasIndex(x => new { x.ActaId, x.RecipientEmail }).IsUnique().HasDatabaseName("IX_meetings_notification_acta_recipient");
+        notification.HasOne<Acta>().WithMany().HasForeignKey(x => x.ActaId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("FK_meetings_notification_acta");
         notification.HasIndex(x => x.MessageId).IsUnique();
         notification.HasIndex(x => new { x.Status, x.CreatedAt });
-        notification.HasOne<ScheduledMeeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
+        notification.HasOne<ScheduledMeeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("FK_meetings_notification_meeting");
 
         var cp = Table<ActaCenterPermission>(model, "acta_center_permission", nameof(ActaCenterPermission.ActaCenterPermissionId));
         Text(cp, nameof(ActaCenterPermission.SolutionCenterCode), 64);

@@ -13,29 +13,30 @@ public sealed class MeetingNotificationComposer
     public IReadOnlyList<MeetingNotification> Compose(Acta acta, ScheduledMeeting? meeting,
         IReadOnlyList<Participant> participants, MeetingsIdentity actor)
     {
-        if (meeting is null) return [];
         var recipients = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         void Add(string? email, string? name)
         {
             var normalized = email?.Trim().ToLowerInvariant();
-            if (normalized is not null && normalized.Length <= 254 && MailAddress.TryCreate(normalized, out var address) && address.Address == normalized)
+            if (normalized is not null && normalized.Contains('@') && normalized.Length <= 254 && MailAddress.TryCreate(normalized, out var address) && address.Address == normalized)
                 recipients.TryAdd(normalized, name ?? "");
         }
-        Add(actor.Email, actor.UserName);
         foreach (var participant in participants) Add(participant.Email, participant.UserName);
-        var zone = TimeZoneInfo.FindSystemTimeZoneById(meeting.TimeZone);
-        var start = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(meeting.StartAtUtc, DateTimeKind.Utc), zone);
-        var end = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(meeting.EndAtUtc, DateTimeKind.Utc), zone);
         var lines = new List<string>
         {
-            $"Reunión: {acta.Title}", $"Acta: {acta.ActaCode}",
-            $"Inicio: {start.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}",
-            $"Fin: {end.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}",
-            $"Zona horaria: {meeting.TimeZone}", $"Modalidad: {meeting.Modality}"
+            "Se ha creado un acta.", $"Título: {acta.Title}", $"Acta: {acta.ActaCode}",
+            $"Fecha del documento: {acta.DocumentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
         };
-        if (meeting.Modality == "PRESENCIAL" && meeting.LocationDescription is not null) lines.Add($"Lugar: {meeting.LocationDescription}");
+        if (meeting is not null)
+        {
+            var zone = TimeZoneInfo.FindSystemTimeZoneById(meeting.TimeZone);
+            var start = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(meeting.StartAtUtc, DateTimeKind.Utc), zone);
+            var end = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(meeting.EndAtUtc, DateTimeKind.Utc), zone);
+            lines.AddRange([$"Inicio: {start.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}",
+                $"Fin: {end.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}", $"Zona horaria: {meeting.TimeZone}", $"Modalidad: {meeting.Modality}"]);
+            if (meeting.Modality == "PRESENCIAL" && meeting.LocationDescription is not null) lines.Add($"Lugar: {meeting.LocationDescription}");
+        }
         if (!string.IsNullOrWhiteSpace(actor.UserName) || !string.IsNullOrWhiteSpace(actor.Email))
-            lines.Add($"Organizador: {actor.UserName} {actor.Email}".Trim());
+            lines.Add($"Creador/organizador: {actor.UserName} {actor.Email}".Trim());
         lines.Add("Esta notificación no confirma una reserva de sala ni incluye un enlace de videoconferencia.");
         var text = string.Join("\n", lines);
         var html = "<!doctype html><html lang=\"es\"><body>" + string.Concat(lines.Select(line => "<p>" + WebUtility.HtmlEncode(line) + "</p>")) + "</body></html>";

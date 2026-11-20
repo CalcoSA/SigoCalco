@@ -33,7 +33,7 @@ public sealed class NotificationTests
     [Theory]
     [InlineData("PRESENCIAL")]
     [InlineData("VIRTUAL")]
-    public async Task Notifications_use_trusted_organizer_and_unique_participants_after_commit(string modality)
+    public async Task Notifications_use_only_explicit_unique_participants_after_commit(string modality)
     {
         var sender = new RecordingSender();
         using var factory = WithSender(sender); using var client = factory.Client();
@@ -68,7 +68,7 @@ public sealed class NotificationTests
     {
         var sender = new RecordingSender { Fail = true, Uncertain = uncertain };
         using var factory = WithSender(sender); using var client = factory.Client();
-        var input = (await ActaApiTests.PrepareAsync(factory, client)) with { Meeting = ActaApiTests.Meeting("VIRTUAL"), Participants = [] };
+        var input = (await ActaApiTests.PrepareAsync(factory, client)) with { Meeting = ActaApiTests.Meeting("VIRTUAL") };
         using var response = await ActaApiTests.SendAsync(client, input);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = (await response.Content.ReadResultAsync<CreatedActaDto>())!;
@@ -90,7 +90,7 @@ public sealed class NotificationTests
     {
         var sender = new RecordingSender { Fail = true };
         using var factory = WithSender(sender); using var client = factory.Client();
-        var input = (await ActaApiTests.PrepareAsync(factory, client)) with { Meeting = ActaApiTests.Meeting("VIRTUAL"), Participants = [] };
+        var input = (await ActaApiTests.PrepareAsync(factory, client)) with { Meeting = ActaApiTests.Meeting("VIRTUAL") };
         using var response = await ActaApiTests.SendAsync(client, input);
         var id = (await response.Content.ReadResultAsync<CreatedActaDto>())!.Notifications!.Items.Single().NotificationId;
         using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<MeetingsDbContext>();
@@ -103,12 +103,17 @@ public sealed class NotificationTests
         Assert.Equal(1, sender.Calls);
     }
     [Fact]
-    public async Task Without_meeting_does_not_call_sender()
+    public async Task Without_meeting_notifies_only_invited_participants()
     {
         var sender = new RecordingSender(); using var factory = WithSender(sender); using var client = factory.Client();
         var input = await ActaApiTests.PrepareAsync(factory, client);
         using var response = await ActaApiTests.SendAsync(client, input);
-        Assert.Null((await response.Content.ReadResultAsync<CreatedActaDto>())!.Notifications); Assert.Equal(0, sender.Calls);
+        var result = (await response.Content.ReadResultAsync<CreatedActaDto>())!;
+        Assert.Equal("ENVIADO", result.Notifications!.State); Assert.Equal(1, sender.Calls);
+        var sent = Assert.Single(sender.Sent);
+        Assert.Null(sent.MeetingId); Assert.Equal(result.ActaId, sent.ActaId);
+        Assert.Equal("person@example.invalid", sent.RecipientEmail);
+        Assert.Contains("Se ha creado un acta", sent.TextBody); Assert.Contains("2026-11-11", sent.TextBody);
     }
     [Fact]
     public void Composer_validates_recipients_encodes_HTML_and_builds_multipart_email()
@@ -164,7 +169,7 @@ public sealed class NotificationTests
         var input = await ActaApiTests.PrepareAsync(factory, client, false);
         await TemplateManagementTests.SetPermissions(factory, MeetingsPermissions.ActasRead);
         await ActaApiTests.AssertFailure(await ActaApiTests.SendAsync(client, input), HttpStatusCode.Forbidden);
-        await TemplateManagementTests.SetPermissions(factory, MeetingsPermissions.ActasManage);
+        await TemplateManagementTests.SetPermissions(factory, MeetingsPermissions.ActasManage, MeetingsPermissions.GlobalRead);
         using var created = await ActaApiTests.SendAsync(client, input);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
     }

@@ -9,7 +9,7 @@ using MySqlConnector;
 
 namespace Meetings.Infrastructure.Persistence.Repositories;
 
-public sealed class ActaStore(MeetingsDbContext db) : IActaStore
+public sealed partial class ActaStore(MeetingsDbContext db) : IActaStore
 {
     public async Task<ActaTemplate?> FindVersionAsync(int versionId, CancellationToken ct)
     {
@@ -61,21 +61,27 @@ public sealed class ActaStore(MeetingsDbContext db) : IActaStore
                         .Select(s => s.MeetingStatusId).SingleAsync(ct);
                     db.Add(meeting);
                     await db.SaveChangesAsync(ct);
-                    if (meeting.Modality == "PRESENCIAL") db.Add(new MeetingReservation
+                    if (meeting.Modality == "PRESENCIAL" && input.RoomId is not null) db.Add(new MeetingReservation
                     {
                         MeetingId = meeting.MeetingId, ExternalRoomId = input.RoomId, RequestedAt = DateTime.UtcNow
                     });
-                    foreach (var notification in input.Notifications)
-                    {
-                        notification.MeetingNotificationId = 0;
-                        notification.MeetingId = meeting.MeetingId;
-                        db.Add(notification);
-                    }
                 }
+                foreach (var notification in input.Notifications)
+                {
+                    notification.MeetingNotificationId = 0;
+                    notification.ActaId = input.Acta.ActaId;
+                    notification.MeetingId = input.Meeting?.MeetingId;
+                    db.Add(notification);
+                }
+                if (input.Notifications.Count == 0) db.Add(new MeetingsLog
+                {
+                    Action = "ACTA_SIN_DESTINATARIOS", Module = "Meetings", UserName = input.Acta.CreatedByUser.ToString(),
+                    Description = $"actaId={input.Acta.ActaId}; {input.Acta.ActaCode}: sin participantes con correo válido.", CreatedAt = DateTime.UtcNow
+                });
                 await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return new(input.Acta.ActaId, input.Acta.ActaCode, input.Meeting?.MeetingId, input.Meeting?.Modality,
-                    input.Meeting?.Modality == "PRESENCIAL" ? new("RESERVATIONS", "PENDIENTE", false) : null);
+                    input.Meeting?.Modality == "PRESENCIAL" && input.RoomId is not null ? new("RESERVATIONS", "PENDIENTE", false) : null);
             }
             catch (DbUpdateException ex) when (ex.InnerException is MySqlException { Number: 1062 })
             {

@@ -106,7 +106,7 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
         var visibility = MeetingsPermissions.Visibility(permissions, actor);
         if (!visibility.Any) throw MeetingsRequestException.Forbidden();
         var result = await store.GetAsync(query.Page, query.PageSize, query.ActaTypeId, scope,
-            readableTypes, actor.CenterCodes, visibility, ct);
+            readableTypes, actor.CenterCodes, visibility, ct, query.LatestVersionOnly);
         return new(result.Items.Select(t => new TemplateDto(t.TemplateId, t.ActaTypeId, t.Name, t.Scope, t.SolutionCenterCode,
             t.CreatedByUser, t.CreatedAt, t.Versions.OrderBy(v => v.VersionNumber).Select(MapVersion).ToArray())).ToArray(),
             query.Page, query.PageSize, result.TotalCount);

@@ -46,5 +46,6 @@ public sealed class ActaParticipant
     public int ActaParticipantId { get; set; }
     public int ActaId { get; set; }
     public int ParticipantId { get; set; }
+    public bool? Attended { get; set; }
 }
 

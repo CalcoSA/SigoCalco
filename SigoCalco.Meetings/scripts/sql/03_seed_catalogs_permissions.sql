@@ -1,4 +1,4 @@
--- Current seeds for a fresh installation; existing databases use 05_six_permissions_and_active_types.sql.
+-- Current seeds for fresh installations using 07_current_model.sql; existing databases use incremental scripts.
 -- Idempotent seeds. Existing permission values are never overwritten.
 -- Session-only encoding; does not alter the shared database's default collation.
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -12,8 +12,7 @@ WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_acta_type WHERE code = 'ADMIN
 
 INSERT INTO sigocalco_meetings_acta_status (name)
 SELECT s.name FROM (
-    SELECT 'BORRADOR' AS name UNION ALL SELECT 'ABIERTA' UNION ALL SELECT 'EN_REVISION'
-    UNION ALL SELECT 'CERRADA' UNION ALL SELECT 'ANULADA'
+    SELECT 'BORRADOR' AS name UNION ALL SELECT 'PUBLICADA' UNION ALL SELECT 'ANULADA'
 ) s WHERE NOT EXISTS (SELECT 1 FROM sigocalco_meetings_acta_status existing WHERE existing.name = s.name);
 
 INSERT INTO sigocalco_meetings_meeting_status (name)

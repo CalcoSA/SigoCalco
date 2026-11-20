@@ -6,6 +6,8 @@
 @actaTypeId = 1
 @solutionCenterCode = REEMPLAZAR_POR_CENTRO_ASIGNADO
 @permissionKey = ACTAS_GESTION
+@actaId = 1
+@participantId = 1
 
 # Usar exclusivamente con Smtp:Enabled=false e Integrations:Reservations:Mode=Simulated.
 # Sustituir IDs por los devueltos por la API. Tipos actuales: 1 REUNION y 3 ADMINISTRATIVA.
@@ -179,7 +181,8 @@ Content-Type: application/json
 
 ### Acta sin reunión. Requiere ACTAS_GESTION y centro asignado al actor.
 # Cambiar UUID para una NUEVA operación. Reutilizarlo al reintentar devuelve 409 sin duplicar.
-# 201: result.integration=null y result.notifications=null. Sin envío automático.
+# 201: status=BORRADOR, integration=null y notifications.state=SIMULADO para los participantes invitados.
+# Crear requiere ACTAS_GESTION, plantilla visible y centro autorizado; ninguna concesión real fue cambiada por las pruebas.
 POST {{baseUrl}}/api/v1/actas
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -219,7 +222,8 @@ Idempotency-Key: 22222222-2222-4222-8222-222222222222
     "endAt": "2026-12-01T11:00:00-05:00",
     "timeZone": "America/Bogota",
     "locationDescription": "Sala principal",
-    "externalRoomId": "ROOM-1"
+    "externalRoomId": "ROOM-1",
+    "reserveRoom": true
   }
 }
 
@@ -245,6 +249,94 @@ Idempotency-Key: 33333333-3333-4333-8333-333333333333
     "endAt": "2026-12-01T11:00:00-05:00",
     "timeZone": "America/Bogota",
     "locationDescription": null,
-    "externalRoomId": null
+    "externalRoomId": null,
+    "reserveRoom": false
   }
 }
+
+### Acta presencial SIN reserva: no hay registro de reserva ni llamada a Reservations
+POST {{baseUrl}}/api/v1/actas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: 44444444-4444-4444-8444-444444444444
+
+{
+  "templateVersionId": {{templateVersionId}},
+  "title": "Seguimiento presencial sin reserva",
+  "documentDate": "2026-12-01",
+  "solutionCenterCode": "{{solutionCenterCode}}",
+  "sections": [{"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-01","hora":"10:00","lugar":"Oficina"}}],
+  "participants": [{"userName":"Persona de prueba","email":"person@example.invalid","participantType":"EXTERNO","userLogin":null}],
+  "meeting": {
+    "modality":"PRESENCIAL",
+    "startAt":"2026-12-01T10:00:00-05:00",
+    "endAt":"2026-12-01T11:00:00-05:00",
+    "timeZone":"America/Bogota",
+    "locationDescription":"Oficina",
+    "reserveRoom":false,
+    "externalRoomId":null
+  }
+}
+
+### Mis actas: 200; únicamente propias. Sin ACTAS_GESTION: 403.
+# result: {items:[...],page:1,pageSize:20,totalCount:...,totalPages:...}
+GET {{baseUrl}}/api/v1/actas?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Detalle: 200; acta, plantilla/versión original, secciones, participantes/asistencia y reunión/reserva
+# Un ID ajeno o inexistente produce 404 con result:null.
+GET {{baseUrl}}/api/v1/actas/{{actaId}}
+Authorization: Bearer {{token}}
+
+### Editar contenido: solo BORRADOR propio; PUBLICADA/ANULADA producen 409
+# PUT reemplaza título, fecha y contenido; no admite estado, centro, reunión, versión, creador ni código.
+PUT {{baseUrl}}/api/v1/actas/{{actaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title":"Seguimiento actualizado",
+  "documentDate":"2026-12-02",
+  "sections":[{"templateSectionId":{{templateSectionId}},"contentJson":{"fecha":"2026-12-02","hora":"11:00","lugar":"Oficina"}}]
+}
+
+### Reemplazar participantes: solo BORRADOR; conserva asistencia de los que permanecen
+# [] elimina solo las asociaciones de esta acta; no borra el catálogo general ni envía nuevos correos.
+PUT {{baseUrl}}/api/v1/actas/{{actaId}}/participants
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "participants":[
+    {"userName":"Persona de prueba","email":"person@example.invalid","participantType":"EXTERNO","userLogin":null},
+    {"userName":"Otra persona","email":"second@example.invalid","participantType":"EXTERNO","userLogin":null}
+  ]
+}
+
+### Asistencia: usar participantId del detalle; true asistió, false no asistió, null pendiente
+# La propiedad attended es obligatoria, pero admite null. No genera correos.
+PUT {{baseUrl}}/api/v1/actas/{{actaId}}/participants/{{participantId}}/attendance
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"attended":true}
+
+### Publicar: BORRADOR -> PUBLICADA; 200. No modifica contenido ni participantes.
+PATCH {{baseUrl}}/api/v1/actas/{{actaId}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status":"PUBLICADA"}
+
+### Anular: BORRADOR/PUBLICADA -> ANULADA; estado terminal
+# Repetir la transición o volver a BORRADOR produce 409. No cancela automáticamente reservas.
+PATCH {{baseUrl}}/api/v1/actas/{{actaId}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status":"ANULADA"}
+
+### Plantillas disponibles: ACTAS_GESTION más visibilidad de plantillas por permisos y centro
+# Última versión exclusivamente. Sin versiones: templateVersionId/versionNumber=null, sections:[], canCreateActa:false.
+GET {{baseUrl}}/api/v1/actas/available-templates?page=1&pageSize=20&scope=GLOBAL&actaTypeId={{actaTypeId}}
+Authorization: Bearer {{token}}

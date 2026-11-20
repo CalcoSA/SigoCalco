@@ -55,7 +55,7 @@ public sealed class ActaApiTests
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var result = (await first.Content.ReadResultAsync<CreatedActaDto>())!;
         Assert.Null(result.MeetingId); Assert.Null(result.Integration);
-        Assert.Null(result.Notifications);
+        Assert.Equal("SIMULADO", result.Notifications!.State);
         using var duplicate = await SendAsync(client, input, key);
         await AssertFailure(duplicate, HttpStatusCode.Conflict);
         using var second = await SendAsync(client, input with { Participants = [new("Changed name", "PERSON@EXAMPLE.INVALID"), new("New person", "new@example.invalid")] });
@@ -68,7 +68,8 @@ public sealed class ActaApiTests
         Assert.All(await db.Set<Acta>().ToArrayAsync(), a => Assert.Equal(1, a.CreatedByUser));
         Assert.Empty(await db.Set<ScheduledMeeting>().ToArrayAsync());
         Assert.Empty(await db.Set<MeetingReservation>().ToArrayAsync()); Assert.Empty(await db.Set<MeetingCalendar>().ToArrayAsync());
-        Assert.Empty(await db.Set<MeetingNotification>().ToArrayAsync());
+        Assert.Equal(3, await db.Set<MeetingNotification>().CountAsync());
+        Assert.All(await db.Set<MeetingNotification>().ToArrayAsync(), n => Assert.Null(n.MeetingId));
     }
 
     [Theory]

@@ -25,6 +25,7 @@ public interface IMeetingNotificationSender
 }
 public interface IMeetingNotificationService
 {
+    Task<NotificationSummaryDto> SendForActaAsync(int actaId, CancellationToken ct);
     Task<NotificationSummaryDto> SendForMeetingAsync(int meetingId, CancellationToken ct);
     Task<NotificationItemDto> RetryAsync(long notificationId, CancellationToken ct);
 }

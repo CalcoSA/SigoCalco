@@ -85,7 +85,7 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
     }
 
     public async Task<TemplatePage> GetAsync(int page, int pageSize, int? actaTypeId, string? scope,
-        IReadOnlyCollection<int> readableTypeIds, IReadOnlyCollection<string> centerCodes, TemplateVisibility visibility, CancellationToken ct)
+        IReadOnlyCollection<int> readableTypeIds, IReadOnlyCollection<string> centerCodes, TemplateVisibility visibility, CancellationToken ct, bool latestVersionOnly = false)
     {
         var query = context.Set<Template>().AsNoTracking().Where(t => readableTypeIds.Contains(t.ActaTypeId));
         if (actaTypeId.HasValue) query = query.Where(t => t.ActaTypeId == actaTypeId);
@@ -96,10 +96,11 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
         var isolation = context.Database.IsMySql() ? IsolationLevel.RepeatableRead : IsolationLevel.Serializable;
         await using var transaction = await context.Database.BeginTransactionAsync(isolation, ct);
         var total = await query.CountAsync(ct);
-        var items = await query.OrderBy(t => t.TemplateId).Skip((page - 1) * pageSize).Take(pageSize)
-            .Include(t => t.Versions.OrderBy(v => v.VersionNumber))
-            .ThenInclude(v => v.Sections.OrderBy(s => s.SortOrder))
-            .AsSplitQuery().ToListAsync(ct);
+        var paged = query.OrderBy(t => t.TemplateId).Skip((page - 1) * pageSize).Take(pageSize);
+        var included = latestVersionOnly
+            ? paged.Include(t => t.Versions.OrderByDescending(v => v.VersionNumber).Take(1)).ThenInclude(v => v.Sections.OrderBy(s => s.SortOrder))
+            : paged.Include(t => t.Versions.OrderBy(v => v.VersionNumber)).ThenInclude(v => v.Sections.OrderBy(s => s.SortOrder));
+        var items = await included.AsSplitQuery().ToListAsync(ct);
         await transaction.CommitAsync(ct);
         return new(items, total);
     }

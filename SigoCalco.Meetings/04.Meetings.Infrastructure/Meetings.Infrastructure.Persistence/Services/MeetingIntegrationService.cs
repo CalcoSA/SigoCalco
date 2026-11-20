@@ -26,8 +26,8 @@ public sealed class MeetingIntegrationService(MeetingsDbContext db, IRoomReserva
             ?? throw MeetingsRequestException.NotFound("No se encontró la reunión.");
         if (meeting.Modality != "PRESENCIAL") return new("RESERVATIONS", "NO_APLICA", false);
         var acta = await db.Set<Acta>().SingleAsync(a => a.ActaId == meeting.ActaId, ct);
-        var reservation = await db.Set<MeetingReservation>().SingleOrDefaultAsync(r => r.MeetingId == meetingId, ct)
-            ?? throw new InvalidOperationException("Falta el registro de reserva.");
+        var reservation = await db.Set<MeetingReservation>().SingleOrDefaultAsync(r => r.MeetingId == meetingId, ct);
+        if (reservation is null) return new("RESERVATIONS", "NO_APLICA", false);
         var cancelled = await db.Set<MeetingStatus>().AnyAsync(s => s.MeetingStatusId == meeting.MeetingStatusId && s.Name == "CANCELADA", ct);
         if (cancelled || reservation.ReservationStatus is "CONFIRMADA" or "CANCELADA" || IsSimulation(reservation.ExternalReservationId))
             return Map(reservation, cancelled);
