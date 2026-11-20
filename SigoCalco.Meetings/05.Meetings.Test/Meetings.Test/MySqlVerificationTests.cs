@@ -183,7 +183,7 @@ public sealed class MySqlVerificationTests
                 var people = new[] { new Participant { Email = email, UserName = "Participante de prueba", ParticipantType = "EXTERNO" } };
                 var drafts = new MeetingNotificationComposer().Compose(acta, meeting, people, actor);
                 var request = new NewActa(acta, [new() { TemplateVersionId = template.TemplateVersionId, TemplateSectionId = template.Sections[0].TemplateSectionId,
-                    ContentJson = "{\"fecha\":\"2026-11-18\",\"hora\":\"10:00\",\"lugar\":\"Prueba\"}" }], people, meeting, null, drafts);
+                    ContentJson = "{\"fecha\":\"2026-11-18\",\"hora\":\"10:00\",\"lugar\":\"Prueba\"}" }], people, meeting, mode == "PRESENCIAL" ? "TEST-ROOM" : null, drafts);
                 var result = await new ActaStore(db).CreateAsync(request, default);
                 actaIds.Add(result.ActaId);
                 Assert.Equal(userId, acta.CreatedByUser);
@@ -192,7 +192,7 @@ public sealed class MySqlVerificationTests
                     if (mode == "PRESENCIAL") Assert.Equal("SIMULADO", (await new MeetingIntegrationService(db,
                         new SimulatedRoomReservationProvider(), NullLogger<MeetingIntegrationService>.Instance).SynchronizeAsync(meeting.MeetingId, default)).State);
                     var notifications = await new MeetingNotificationService(db, new SimulatedNotificationSender()).SendForMeetingAsync(meeting.MeetingId, default);
-                    Assert.Equal("SIMULADO", notifications.State); Assert.Equal(2, notifications.Items.Count); Assert.False(notifications.SmtpAccepted);
+                    Assert.Equal("SIMULADO", notifications.State); Assert.Single(notifications.Items); Assert.False(notifications.SmtpAccepted);
                 }
                 else Assert.Null(result.MeetingId);
                 var duplicate = await Assert.ThrowsAsync<Meetings.Domain.Exceptions.MeetingsRequestException>(() => new ActaStore(db).CreateAsync(request, default));
@@ -221,7 +221,7 @@ public sealed class MySqlVerificationTests
             db.ChangeTracker.Clear();
             await using var cleanup = await db.Database.BeginTransactionAsync();
             var meetings = await db.Set<ScheduledMeeting>().Where(m => actaIds.Contains(m.ActaId)).Select(m => m.MeetingId).ToArrayAsync();
-            await db.Set<MeetingNotification>().Where(n => meetings.Contains(n.MeetingId)).ExecuteDeleteAsync();
+            await db.Set<MeetingNotification>().Where(n => actaIds.Contains(n.ActaId)).ExecuteDeleteAsync();
             await db.Set<MeetingReservation>().Where(r => meetings.Contains(r.MeetingId)).ExecuteDeleteAsync();
             await db.Set<ScheduledMeeting>().Where(m => meetings.Contains(m.MeetingId)).ExecuteDeleteAsync();
             await db.Set<ActaParticipant>().Where(p => actaIds.Contains(p.ActaId)).ExecuteDeleteAsync();

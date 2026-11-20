@@ -1,5 +1,7 @@
 # Entrega: seis permisos, Mis plantillas y SMTP
 
+Actualización del 20/11/2026: [MIS_ACTAS.md](MIS_ACTAS.md) describe los estados, edición/asistencia y reservas opcionales. Sustituye la regla histórica de correo de las secciones 9 y 11: ahora se notifica a los participantes explícitos al crear cualquier acta, incluso sin reunión, y el creador no se añade automáticamente como destinatario.
+
 Actualización del 19/11/2026: la administración de las asignaciones de estos seis permisos mediante GET/POST/PUT está documentada en [PERMISSIONS_API.md](PERMISSIONS_API.md). Solo el rol real Administrador puede utilizarla; no cambia las definiciones ni introduce nuevas claves.
 
 Esta entrega sustituye los contratos anteriores de permisos por tipo de acta y la integración Graph. Solo cambia Meetings. No modifica Authentication, Reservations ni React. No ejecuta login ni envía correos reales. Todos los endpoints requieren el JWT existente de Authentication y conservan `isSuccess`, `message`, `result` y los códigos HTTP 200/201/400/401/403/404/409/500.

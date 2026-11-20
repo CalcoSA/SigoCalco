@@ -19,7 +19,7 @@ public sealed class ResponseEnvelopeTests
         await ActaApiTests.AssertFailure(await client.PostAsync("/api/v1/actas", new StringContent("{invalid", Encoding.UTF8, "application/json")), HttpStatusCode.BadRequest);
         await ActaApiTests.AssertFailure(await client.PostAsJsonAsync("/api/v1/actas", new { }), HttpStatusCode.BadRequest);
         await ActaApiTests.AssertFailure(await client.PostAsJsonAsync("/api/v1/meetings", new { actaId = 1 }), HttpStatusCode.NotFound);
-        await ActaApiTests.AssertFailure(await client.GetAsync("/api/v1/actas"), HttpStatusCode.MethodNotAllowed);
+        await ActaApiTests.AssertFailure(await client.DeleteAsync("/api/v1/actas"), HttpStatusCode.MethodNotAllowed);
         await ActaApiTests.AssertFailure(await client.PostAsJsonAsync("/api/v1/templates/999/versions", new CreateTemplateVersionDto([])), HttpStatusCode.NotFound);
         await ActaApiTests.AssertFailure(await client.GetAsync("/api/v1/templates?page=0"), HttpStatusCode.BadRequest);
     }
@@ -38,6 +38,13 @@ public sealed class ResponseEnvelopeTests
     }
     private sealed class ThrowingApplication : IActaApplication
     {
+        public Task<PagedActasDto> GetAsync(ActaQuery q, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<ActaDetailDto> GetByIdAsync(int id, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<ActaDetailDto> UpdateAsync(int id, UpdateActaDto input, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<ActaDetailDto> UpdateParticipantsAsync(int id, UpdateActaParticipantsDto input, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<ActaDetailDto> UpdateAttendanceAsync(int id, int participantId, UpdateAttendanceDto input, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<ActaDetailDto> ChangeStatusAsync(int id, UpdateActaStatusDto input, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<PagedAvailableTemplatesDto> GetAvailableTemplatesAsync(TemplateQuery query, CancellationToken ct) => throw new InvalidOperationException();
         public Task<CreatedActaDto> CreateAsync(CreateActaDto input, string? idempotencyKey, CancellationToken ct) =>
             throw new InvalidOperationException("secret-detail");
     }

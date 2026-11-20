@@ -8,9 +8,13 @@ namespace Meetings.Infrastructure.Persistence.Services;
 
 public sealed class MeetingNotificationService(MeetingsDbContext db, IMeetingNotificationSender sender) : IMeetingNotificationService
 {
-    public async Task<NotificationSummaryDto> SendForMeetingAsync(int meetingId, CancellationToken ct)
+    public Task<NotificationSummaryDto> SendForActaAsync(int actaId, CancellationToken ct) =>
+        SendAsync(db.Set<MeetingNotification>().Where(n => n.ActaId == actaId), ct);
+    public Task<NotificationSummaryDto> SendForMeetingAsync(int meetingId, CancellationToken ct) =>
+        SendAsync(db.Set<MeetingNotification>().Where(n => n.MeetingId == meetingId), ct);
+    private async Task<NotificationSummaryDto> SendAsync(IQueryable<MeetingNotification> query, CancellationToken ct)
     {
-        var ids = await db.Set<MeetingNotification>().AsNoTracking().Where(n => n.MeetingId == meetingId)
+        var ids = await query.AsNoTracking()
             .OrderBy(n => n.MeetingNotificationId).Select(n => n.MeetingNotificationId).ToArrayAsync(ct);
         var items = new List<NotificationItemDto>();
         foreach (var id in ids) items.Add(await RetryAsync(id, ct));

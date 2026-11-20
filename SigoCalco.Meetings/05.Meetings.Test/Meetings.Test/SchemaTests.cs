@@ -60,13 +60,11 @@ public sealed class SchemaTests
         }
         else
         {
-            var file = Path.Combine(AppContext.BaseDirectory, "sql", "02_create_model.sql");
-            Assert.True(File.Exists(file), "Debe generarse y revisar 02_create_model.sql.");
-            var incremental = Path.Combine(AppContext.BaseDirectory, "sql", "04_add_meeting_notifications.sql");
-            Assert.True(File.Exists(incremental));
+            var file = Path.Combine(AppContext.BaseDirectory, "sql", "07_current_model.sql");
+            Assert.True(File.Exists(file), "Debe generarse y revisar 07_current_model.sql; los scripts históricos no se reescriben.");
             static string[] Statements(string value) => value.Replace("\r\n", "\n").Split(';', StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim()).Where(s => s.Length > 0).OrderBy(s => s, StringComparer.Ordinal).ToArray();
-            Assert.Equal(Statements(sql), Statements(File.ReadAllText(file) + "\n" + File.ReadAllText(incremental)));
+            Assert.Equal(Statements(sql), Statements(File.ReadAllText(file)));
         }
         Assert.DoesNotContain("authentication", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER DATABASE", sql, StringComparison.OrdinalIgnoreCase);
