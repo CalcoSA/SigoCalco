@@ -11,16 +11,20 @@ namespace Meetings.Infrastructure.Persistence.Repositories;
 public sealed partial class ActaStore
 {
     private IQueryable<ActaListItemDto> OwnedRows(int userId, int? id = null, int skip = 0, int take = int.MaxValue)
+        => ActaRows(db.Set<Acta>().Where(a => a.CreatedByUser == userId && (!id.HasValue || a.ActaId == id.Value)), skip, take);
+
+    private IQueryable<ActaListItemDto> ActaRows(IQueryable<Acta> actas, int skip = 0, int take = int.MaxValue, bool byCreation = false)
     {
-        var rows = from a in db.Set<Acta>().AsNoTracking()
+        var rows = from a in actas.AsNoTracking()
         join type in db.Set<ActaType>() on a.ActaTypeId equals type.ActaTypeId
         join status in db.Set<ActaStatus>() on a.ActaStatusId equals status.ActaStatusId
         join m in db.Set<ScheduledMeeting>() on a.ActaId equals m.ActaId into meetings
         from meeting in meetings.DefaultIfEmpty()
-        where a.CreatedByUser == userId && (!id.HasValue || a.ActaId == id.Value)
         select new { a, type, status, meeting };
         // Apply filtering/ordering to mapped columns before projecting the immutable DTO constructor.
-        return rows.OrderByDescending(r => r.a.ActaId).Skip(skip).Take(take).Select(r => new ActaListItemDto(
+        var ordered = byCreation ? rows.OrderByDescending(r => r.a.CreatedAt).ThenByDescending(r => r.a.ActaId)
+            : rows.OrderByDescending(r => r.a.ActaId);
+        return ordered.Skip(skip).Take(take).Select(r => new ActaListItemDto(
             r.a.ActaId, r.a.ActaCode, r.a.Title, r.a.DocumentDate, r.a.ActaTypeId, r.type.Name, r.a.ActaStatusId, r.status.Name,
             r.a.SolutionCenterCode, r.a.CreatedByUser, r.a.CreatedAt, r.a.UpdatedAt, r.meeting != null, r.meeting == null ? null : r.meeting.Modality));
     }
@@ -34,12 +38,17 @@ public sealed partial class ActaStore
         return new(items, query.Page, query.PageSize, total);
     }
 
-    public async Task<ActaDetailDto> GetOwnedDetailAsync(int id, int userId, CancellationToken ct)
+    // Keep the owner-only entry point for all writes. Shared access must never reach a mutation.
+    public Task<ActaDetailDto> GetOwnedDetailAsync(int id, int userId, CancellationToken ct) =>
+        GetDetailAsync(db.Set<Acta>().Where(a => a.ActaId == id && a.CreatedByUser == userId), userId, true, ct);
+
+    private async Task<ActaDetailDto> GetDetailAsync(IQueryable<Acta> accessible, int userId, bool canReadOwned, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(db.Database.IsMySql() ? IsolationLevel.RepeatableRead : IsolationLevel.Serializable, ct);
-        var acta = await db.Set<Acta>().AsNoTracking().SingleOrDefaultAsync(a => a.ActaId == id && a.CreatedByUser == userId, ct)
-            ?? throw Missing();
-        var row = await OwnedRows(userId, id).SingleAsync(ct);
+        var acta = await accessible.AsNoTracking().SingleOrDefaultAsync(ct) ?? throw Missing();
+        if (acta.CreatedByUser == userId && !canReadOwned) throw MeetingsRequestException.Forbidden();
+        var id = acta.ActaId;
+        var row = await ActaRows(accessible).SingleAsync(ct);
         var source = (await FindVersionAsync(acta.TemplateVersionId, ct))!;
         var contents = await db.Set<ActaSection>().AsNoTracking().Where(s => s.ActaId == id).ToDictionaryAsync(s => s.TemplateSectionId, ct);
         var sections = source.Version.Sections.OrderBy(s => s.SortOrder).Select(s => new ActaSectionDto(
@@ -92,6 +101,7 @@ public sealed partial class ActaStore
                     participant.ParticipantId = 0; db.Add(participant); await db.SaveChangesAsync(ct); person = participant;
                 }
                 if (!retained.Add(person.ParticipantId)) throw MeetingsRequestException.Invalid("Los participantes están duplicados.");
+                ParticipantIdentity.RequireCompatible(person, participant);
                 if (!existing.Any(p => p.ParticipantId == person.ParticipantId)) db.Add(new ActaParticipant { ActaId = id, ParticipantId = person.ParticipantId });
             }
             // Retained associations keep their attendance; only this acta's removed associations are deleted.

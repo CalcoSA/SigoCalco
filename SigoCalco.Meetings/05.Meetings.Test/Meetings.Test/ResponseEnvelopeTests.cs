@@ -39,6 +39,7 @@ public sealed class ResponseEnvelopeTests
     private sealed class ThrowingApplication : IActaApplication
     {
         public Task<PagedActasDto> GetAsync(ActaQuery q, CancellationToken ct) => throw new InvalidOperationException();
+        public Task<PagedActasDto> GetSharedAsync(ActaQuery q, CancellationToken ct) => throw new InvalidOperationException();
         public Task<ActaDetailDto> GetByIdAsync(int id, CancellationToken ct) => throw new InvalidOperationException();
         public Task<ActaDetailDto> UpdateAsync(int id, UpdateActaDto input, CancellationToken ct) => throw new InvalidOperationException();
         public Task<ActaDetailDto> UpdateParticipantsAsync(int id, UpdateActaParticipantsDto input, CancellationToken ct) => throw new InvalidOperationException();

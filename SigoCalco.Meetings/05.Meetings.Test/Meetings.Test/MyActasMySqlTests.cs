@@ -107,6 +107,7 @@ public sealed class MyActasMySqlTests
                 Assert.Equal(5,await fresh.Set<MeetingNotification>().CountAsync());
                 Assert.Equal(1,await fresh.Set<MeetingReservation>().CountAsync());
             }
+            await SharedActasTests.ExerciseReads(factory.Services, client, input);
         }
         finally
         {
@@ -130,7 +131,7 @@ public sealed class MyActasMySqlTests
                 ["ConnectionStrings:MeetingsDatabase"]=connection,["Jwt:Secret"]=MeetingsApiFactory.Secret,
                 ["Jwt:Issuer"]="meetings-tests",["Jwt:Audience"]="meetings-tests",["Smtp:Enabled"]="false"
             }));
-            builder.ConfigureServices(s=>{s.RemoveAll<IAuthenticationDirectory>();s.AddScoped<IAuthenticationDirectory,StubDirectory>();});
+            builder.ConfigureServices(s=>{s.RemoveAll<IAuthenticationDirectory>();s.AddScoped<IAuthenticationDirectory,SharedActasTests.Directory>();});
         }
     }
 }

@@ -105,6 +105,8 @@ public sealed partial class ActaApplication(IActaStore store, ITemplateStore tem
             if (type is not ("INTERNO" or "EXTERNO")) throw MeetingsRequestException.Invalid("participantType debe ser INTERNO o EXTERNO.");
             if (type == "EXTERNO" && participant.UserLogin is not null)
                 throw MeetingsRequestException.Invalid("Los participantes EXTERNO requieren userLogin nulo.");
+            if (type == "INTERNO" && ParticipantIdentity.NormalizeLogin(participant.UserLogin) is null)
+                throw MeetingsRequestException.Invalid("Los participantes INTERNO requieren un userLogin válido.");
             participants.Add(new Participant { UserName = Text(participant.UserName, 250, "userName"), Email = email,
                 ParticipantType = type, UserLogin = type == "INTERNO" ? Text(participant.UserLogin, 60, "userLogin") : null });
         }

@@ -41,7 +41,7 @@ public sealed class StubDirectory : IAuthenticationDirectory
     public Task<MeetingsIdentity> ResolveAsync(int userId, int roleId, string roleName, CancellationToken ct)
     {
         if (userId != 1 || roleId != 1 || roleName != "Administrador") throw MeetingsRequestException.Forbidden();
-        return Task.FromResult(new MeetingsIdentity(1, [" Administrador "], ["R01"], "Organizador de prueba", "organizer@example.invalid"));
+        return Task.FromResult(new MeetingsIdentity(1, [" Administrador "], ["R01"], "Organizador de prueba", "organizer@example.invalid", "test.admin"));
     }
 }
 
@@ -95,9 +95,10 @@ public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
         return client;
     }
     public static string Token(string issuer = "meetings-tests", string audience = "meetings-tests", bool expired = false,
-        string secret = Secret, string idUser = "1", string sub = "1", string role = "Administrador") =>
+        string secret = Secret, string idUser = "1", string sub = "1", string role = "Administrador", string? login = "test.admin") =>
         new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(issuer, audience,
-            [new Claim("idUser", idUser), new Claim("sub", sub), new Claim("idRole", "1"), new Claim("nameRole", role)],
+            [new Claim("idUser", idUser), new Claim("sub", sub), new Claim("idRole", "1"), new Claim("nameRole", role),
+                ..(login is null ? Array.Empty<Claim>() : [new Claim("userLogin", login)])],
             expires: expired ? DateTime.UtcNow.AddMinutes(-1) : DateTime.UtcNow.AddMinutes(5),
             signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)), SecurityAlgorithms.HmacSha256)));
 

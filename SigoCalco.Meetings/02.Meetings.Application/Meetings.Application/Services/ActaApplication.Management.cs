@@ -17,12 +17,33 @@ public sealed partial class ActaApplication
     public async Task<PagedActasDto> GetAsync(ActaQuery query, CancellationToken ct)
     {
         var actor = await RequireActorAsync(ct);
-        if (query.Page < 1 || query.PageSize is < 1 or > 100 || (long)(query.Page - 1) * query.PageSize > int.MaxValue)
-            throw MeetingsRequestException.Invalid("Paginación inválida: page >= 1 y pageSize entre 1 y 100.");
+        ValidatePage(query);
         return await store.GetOwnedAsync(actor.UserId, query, ct);
     }
-    public async Task<ActaDetailDto> GetByIdAsync(int id, CancellationToken ct) =>
-        await store.GetOwnedDetailAsync(id, (await RequireActorAsync(ct)).UserId, ct);
+    private static void ValidatePage(ActaQuery query)
+    {
+        if (query.Page < 1 || query.PageSize is < 1 or > 100 || (long)(query.Page - 1) * query.PageSize > int.MaxValue)
+            throw MeetingsRequestException.Invalid("Paginación inválida: page >= 1 y pageSize entre 1 y 100.");
+    }
+    private async Task<MeetingsIdentity> RequireReaderAsync(CancellationToken ct)
+    {
+        var actor = await identity.GetAsync(ct);
+        if (ParticipantIdentity.NormalizeLogin(actor.UserLogin) is null)
+            throw new MeetingsRequestException(401, "La identidad autenticada no contiene un userLogin válido.");
+        return actor;
+    }
+    public async Task<PagedActasDto> GetSharedAsync(ActaQuery query, CancellationToken ct)
+    {
+        var actor = await RequireReaderAsync(ct);
+        ValidatePage(query);
+        return await store.GetSharedAsync(actor.UserId, actor.UserLogin!, query, ct);
+    }
+    public async Task<ActaDetailDto> GetByIdAsync(int id, CancellationToken ct)
+    {
+        var actor = await RequireReaderAsync(ct);
+        var canReadOwned = MeetingsPermissions.Allowed(await templates.GetPermissionsAsync(ct), actor, MeetingsPermissions.ActasManage);
+        return await store.GetReadableDetailAsync(id, actor.UserId, actor.UserLogin!, canReadOwned, ct);
+    }
     public async Task<ActaDetailDto> UpdateAsync(int id, UpdateActaDto input, CancellationToken ct)
     {
         var actor = await RequireActorAsync(ct);

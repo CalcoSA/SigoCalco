@@ -86,14 +86,17 @@ public sealed class MySqlVerificationTests
             ORDER BY ur.IdUser LIMIT 1
             """).SingleAsync();
         var issuer = new JwtTokenApplication(new ConfigurationBuilder().AddInMemoryCollection(settings).Build());
+        var verifiedActor = await new AuthenticationDirectory(db).ResolveAsync(actor.IdUser, actor.IdRole, actor.NameRole, default);
+        Assert.False(string.IsNullOrWhiteSpace(verifiedActor.UserLogin));
         var token = issuer.GenerateToken(new UserDto
         {
-            IdUser = actor.IdUser, IdRole = actor.IdRole, NameRole = actor.NameRole, UserLogin = "automated-verification"
+            IdUser = actor.IdUser, IdRole = actor.IdRole, NameRole = actor.NameRole, UserLogin = verifiedActor.UserLogin
         }, Guid.NewGuid().ToString("D"));
         using var factory = new MySqlApiFactory(settings);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
         var types = await client.GetResultAsync<ActaTypeDto[]>("/api/v1/acta-types");
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/actas/shared-with-me")).StatusCode);
         Assert.Equal(2, types!.Length);
         var type = await db.Set<ActaType>().SingleAsync(t => t.Code == "REUNION");
         var name = "CODEX-MIGRATION-VERIFY-" + Guid.NewGuid().ToString("N");
