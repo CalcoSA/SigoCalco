@@ -9,6 +9,28 @@
 @actaId = 1
 @participantId = 1
 
+### CORS: preflight de React, sin JWT ni body. Esperado 204 y Allow-Origin http://localhost:5173.
+# Usar la URL HTTPS directa: los preflight no deben depender de una redirección HTTP -> HTTPS.
+OPTIONS {{baseUrl}}/api/v1/actas
+Origin: http://localhost:5173
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization,content-type,idempotency-key
+
+### CORS con JWT: respuesta normal con Access-Control-Allow-Origin; sin Allow-Credentials.
+GET {{baseUrl}}/api/v1/acta-types
+Origin: http://localhost:5173
+Authorization: Bearer {{token}}
+
+### CORS sin JWT: 401 con el formato estándar y Allow-Origin para que React pueda leer el error.
+GET {{baseUrl}}/api/v1/acta-types
+Origin: http://localhost:5173
+
+### Origen no autorizado de prueba: OPTIONS 204, sin encabezados Access-Control-Allow-*.
+OPTIONS {{baseUrl}}/api/v1/actas
+Origin: https://not-allowed.invalid
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization,content-type,idempotency-key
+
 # Usar exclusivamente con Smtp:Enabled=false e Integrations:Reservations:Mode=Simulated.
 # Sustituir IDs por los devueltos por la API. Tipos actuales: 1 REUNION y 3 ADMINISTRATIVA.
 # Permisos: PLANTILLAS_GLOBALES_GESTION / PLANTILLAS_GLOBALES_LECTURA,
