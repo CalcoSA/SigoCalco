@@ -12,11 +12,22 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+const string CorsPolicy = "SigoCalcoCorsPolicy";
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false)
         .AddUserSecrets<Program>(optional: true).AddEnvironmentVariables();
 }
+builder.Services.AddCors(options =>
+{
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+    if (allowedOrigins.Any(origin => string.IsNullOrWhiteSpace(origin) || origin.Contains('*') ||
+        !Uri.TryCreate(origin, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
+        uri.UserInfo.Length != 0 || !string.Equals(origin, uri.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase)))
+        throw new InvalidOperationException("Cors:AllowedOrigins debe contener orígenes HTTP/HTTPS completos, sin comodines, rutas, credenciales ni barra final.");
+    options.AddPolicy(CorsPolicy, policy => policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod());
+});
+
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
 {
     options.InvalidModelStateResponseFactory = _ => new BadRequestObjectResult(
@@ -157,6 +168,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi().RequireAuthorization();
 }
 app.UseHttpsRedirection();
+app.UseRouting();
+app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

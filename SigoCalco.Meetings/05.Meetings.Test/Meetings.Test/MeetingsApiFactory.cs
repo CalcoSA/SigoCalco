@@ -48,6 +48,8 @@ public sealed class StubDirectory : IAuthenticationDirectory
 public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
 {
     public Action<IServiceCollection>? Customize { get; set; }
+    public string EnvironmentName { get; init; } = "Testing";
+    public IReadOnlyDictionary<string, string?> ConfigurationOverrides { get; init; } = new Dictionary<string, string?>();
     public CommandCounter Commands { get; } = new();
     public const string Secret = "tests-only-signing-secret-not-a-real-credential-0123456789";
     private readonly SqliteConnection connection = new("Data Source=:memory:");
@@ -58,13 +60,13 @@ public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
     }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(EnvironmentName);
         builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:MeetingsDatabase"] = "Server=127.0.0.1;Database=never_connect_tests;",
             ["Jwt:Secret"] = Secret, ["Jwt:Issuer"] = "meetings-tests", ["Jwt:Audience"] = "meetings-tests", ["Smtp:Enabled"] = "false"
-        }));
+        }).AddInMemoryCollection(ConfigurationOverrides));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<MeetingsDbContext>();
