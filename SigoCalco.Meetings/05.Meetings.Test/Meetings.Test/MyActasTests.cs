@@ -19,7 +19,7 @@ public sealed class MyActasTests
     {
         using var factory=new MeetingsApiFactory();using var client=factory.Client();
         var doc=factory.Services.GetRequiredService<Swashbuckle.AspNetCore.Swagger.ISwaggerProvider>().GetSwagger("v1");
-        Assert.Equal(19,doc.Paths.Values.Sum(p=>p.Operations!.Count));
+        Assert.Equal(20,doc.Paths.Values.Sum(p=>p.Operations!.Count));
         foreach(var suffix in new[]{"","/{actaId}","/{actaId}/participants","/{actaId}/participants/{participantId}/attendance","/{actaId}/status","/available-templates"})
             foreach(var operation in doc.Paths["/api/v1/actas"+suffix].Operations!.Values)
             {
@@ -165,8 +165,10 @@ public sealed class MyActasTests
         using var request = new HttpRequestMessage(new(method), "/api/v1/actas"+suffix) { Content=JsonContent.Create(body) };
         await ActaApiTests.AssertFailure(await anonymous.SendAsync(request), HttpStatusCode.Unauthorized);
         using var authenticated = factory.Client();
-        using var denied = new HttpRequestMessage(new(method), "/api/v1/actas"+suffix) { Content=JsonContent.Create(body) };
-        await ActaApiTests.AssertFailure(await authenticated.SendAsync(denied), HttpStatusCode.Forbidden);
+        using var denied = new HttpRequestMessage(new(method), "/api/v1/actas"+suffix) { Content=method == "GET" ? null : JsonContent.Create(body) };
+        // The detail now hides missing/unshared actas with 404 before considering owner permissions.
+        await ActaApiTests.AssertFailure(await authenticated.SendAsync(denied),
+            method == "GET" && suffix == "/1" ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden);
     }
 
     [Fact]

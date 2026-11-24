@@ -22,11 +22,12 @@ public sealed class AuthenticationJwtCompatibilityTests
         var issuer = new JwtTokenApplication(config);
         var token = issuer.GenerateToken(new UserDto
         {
-            IdUser = 1, IdRole = 1, NameRole = "Administrador", UserLogin = "compatibility-test"
+            IdUser = 1, IdRole = 1, NameRole = "Administrador", UserLogin = "test.admin"
         }, Guid.NewGuid().ToString("D"));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/acta-types")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/templates")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/permissions")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/actas/shared-with-me")).StatusCode);
     }
 }

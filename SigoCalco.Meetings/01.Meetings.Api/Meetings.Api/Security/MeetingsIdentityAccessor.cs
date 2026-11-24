@@ -1,5 +1,6 @@
 using Meetings.Application.Interfaces;
 using Meetings.Domain.Exceptions;
+using Meetings.Domain.Models.Actas;
 
 namespace Meetings.Api.Security;
 
@@ -16,7 +17,13 @@ public sealed class MeetingsIdentityAccessor(IHttpContextAccessor accessor, IAut
             !int.TryParse(user.FindFirst("idRole")?.Value, out var roleId) || roleId <= 0 ||
             string.IsNullOrWhiteSpace(user.FindFirst("nameRole")?.Value))
             throw new MeetingsRequestException(401, "La identidad autenticada no contiene usuario y rol válidos.");
-        cached = await directory.ResolveAsync(userId, roleId, user.FindFirst("nameRole")!.Value, ct);
+        var resolved = await directory.ResolveAsync(userId, roleId, user.FindFirst("nameRole")!.Value, ct);
+        var claims = user.FindAll("userLogin").ToArray();
+        var login = claims.Length == 1 ? ParticipantIdentity.NormalizeLogin(claims[0].Value) : null;
+        // A login is usable for document participation only when BOTH the signed claim and
+        // the current Authentication catalog identify the same user. No catalog/email fallback.
+        cached = resolved with { UserLogin = login is not null &&
+            login == ParticipantIdentity.NormalizeLogin(resolved.UserLogin) ? login : null };
         return cached;
     }
 }

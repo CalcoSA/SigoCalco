@@ -51,6 +51,7 @@ public sealed partial class ActaStore(MeetingsDbContext db) : IActaStore
                         existing = participant;
                     }
                     // Reusing a participant never overwrites its historical identity from a request.
+                    ParticipantIdentity.RequireCompatible(existing, participant);
                     db.Add(new ActaParticipant { ActaId = input.Acta.ActaId, ParticipantId = existing.ParticipantId });
                 }
                 if (input.Meeting is { } meeting)

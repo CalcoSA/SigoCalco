@@ -1,6 +1,7 @@
 using Meetings.Api.Responses;
 using Meetings.Application.Dtos;
 using Meetings.Application.Interfaces;
+using Meetings.Domain.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,10 +30,32 @@ public sealed class ActasController(IActaApplication application) : ControllerBa
     public async Task<IActionResult> AvailableTemplates([FromQuery] TemplateQuery query, CancellationToken ct) =>
         Ok(ApiResponse.Success(await application.GetAvailableTemplatesAsync(query, ct), "Plantillas disponibles consultadas correctamente."));
 
+    [HttpGet("shared-with-me")]
+    [EndpointSummary("Mis compartidas: actas de otros creadores donde soy participante interno; solo lectura")]
+    [EndpointDescription("Identidad tomada del JWT y verificada en Authentication. No requiere ACTAS_GESTION ni ACTAS_LECTURA. Incluye todos los estados, con paginación y sin duplicados.")]
+    [ProducesResponseType(typeof(ApiResponse<PagedActasDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Shared([FromQuery] ActaQuery query, CancellationToken ct)
+    {
+        ValidateReadRequest(paginated: true);
+        return Ok(ApiResponse.Success(await application.GetSharedAsync(query, ct), "Actas compartidas consultadas correctamente."));
+    }
+
     [HttpGet("{actaId:int}")]
+    [EndpointSummary("Detalle original: creador con ACTAS_GESTION o participante interno en modo lectura")]
+    [EndpointDescription("Un usuario ajeno recibe 404. La participación no habilita edición, asistencia ni cambios de estado.")]
     [ProducesResponseType(typeof(ApiResponse<ActaDetailDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Detail(int actaId, CancellationToken ct) =>
-        Ok(ApiResponse.Success(await application.GetByIdAsync(actaId, ct), "Acta consultada correctamente."));
+    public async Task<IActionResult> Detail(int actaId, CancellationToken ct)
+    {
+        ValidateReadRequest(paginated: false);
+        return Ok(ApiResponse.Success(await application.GetByIdAsync(actaId, ct), "Acta consultada correctamente."));
+    }
+
+    private void ValidateReadRequest(bool paginated)
+    {
+        if (Request.ContentLength > 0 || Request.Headers.TransferEncoding.Count > 0 || Request.Query.Keys.Any(key =>
+            !paginated || !(key.Equals("page", StringComparison.OrdinalIgnoreCase) || key.Equals("pageSize", StringComparison.OrdinalIgnoreCase))))
+            throw MeetingsRequestException.Invalid("Esta consulta no acepta body ni parámetros de identidad; solo los parámetros documentados.");
+    }
 
     [HttpPut("{actaId:int}")]
     [EndpointSummary("Editar título, fecha y contenido de un acta propia en BORRADOR")]

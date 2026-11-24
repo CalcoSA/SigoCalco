@@ -284,8 +284,24 @@ GET {{baseUrl}}/api/v1/actas?page=1&pageSize=20
 Authorization: Bearer {{token}}
 
 ### Detalle: 200; acta, plantilla/versión original, secciones, participantes/asistencia y reunión/reserva
-# Un ID ajeno o inexistente produce 404 con result:null.
+# Creador: ACTAS_GESTION. Participante INTERNO de otro creador: lectura por userLogin validado.
+# No participante/no creador o ID inexistente: 404 con result:null. Ser Administrador no evita este filtro.
 GET {{baseUrl}}/api/v1/actas/{{actaId}}
+Authorization: Bearer {{token}}
+
+### Mis compartidas: usar el JWT propio del participante; sin body ni parámetros de identidad
+# No requiere ACTAS_GESTION ni ACTAS_LECTURA. BORRADOR, PUBLICADA y ANULADA; excluye actas propias.
+# Orden createdAt DESC, actaId DESC. page >= 1, pageSize 1..100. Sin resultados: 200, items:[], totalCount:0.
+GET {{baseUrl}}/api/v1/actas/shared-with-me?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Abrir acta compartida: mismo GET de detalle, mismo token del participante
+# Conserva la versión original. Compartir no habilita PUT/PATCH; esos endpoints siguen exigiendo creador + ACTAS_GESTION.
+GET {{baseUrl}}/api/v1/actas/{{actaId}}
+Authorization: Bearer {{token}}
+
+### Intentar suplantación por query: 400; el login solo procede del JWT contrastado con Authentication
+GET {{baseUrl}}/api/v1/actas/shared-with-me?userLogin=otro.usuario
 Authorization: Bearer {{token}}
 
 ### Editar contenido: solo BORRADOR propio; PUBLICADA/ANULADA producen 409

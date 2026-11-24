@@ -1,10 +1,12 @@
 # Mis actas: entrega del 20/11/2026
 
+Actualización del 23/11/2026: el GET por ID también admite participantes internos de otros creadores en modo lectura. Véase [MIS_COMPARTIDAS.md](MIS_COMPARTIDAS.md) para la autorización y el procedimiento vigente. Los valores de permisos y conteos descritos abajo corresponden a la entrega del 20/11, no sustituyen la configuración dinámica actual.
+
 Se reutilizan JWT e identidad validada, las seis claves y su administración, las plantillas/versiones inmutables, validación JSON, creación transaccional, participantes reutilizables, Idempotency-Key, MailKit y los proveedores simulados. No se modificaron Authentication, Reservations, React ni las configuraciones privadas. No se enviaron correos reales.
 
 ## Autorización y estados
 
-Todas las operaciones de Mis actas requieren `ACTAS_GESTION`. El listado filtra por `created_by_user` en SQL y sus totales corresponden al usuario. Las consultas y mutaciones por ID verifican propiedad; un acta ajena responde 404, igual que una inexistente. La pertenencia al mismo centro y el rol Administrador no sustituyen la propiedad ni el permiso funcional. `ACTAS_LECTURA` no habilita este módulo.
+La gestión y el listado propio requieren `ACTAS_GESTION`. El listado filtra por `created_by_user` en SQL y sus totales corresponden al usuario. Las mutaciones verifican propiedad. El GET por ID admite al creador autorizado o al participante interno de otro creador; una persona ajena recibe 404, igual que ante un acta inexistente. El centro y el rol Administrador no sustituyen estas condiciones. `ACTAS_LECTURA` no concede acceso general ni es necesario para leer por participación.
 
 Las seis asignaciones reales permanecen sin cambios: gestión de plantillas GLOBAL/CENTRO contiene Administrador; los otros cuatro permisos, incluido ACTAS_GESTION, continúan vacíos. No se necesita otra decisión para administrar permisos: los tres endpoints anteriores siguen reservados al Administrador real, sin cambios en esta entrega. Un administrador deberá realizar la asignación funcional autorizada antes de las pruebas manuales de actas.
 
@@ -24,7 +26,8 @@ La creación fija BORRADOR en persistencia; el cliente no puede elegir estado. U
 |---|---|
 | POST `/api/v1/actas` | Existente adaptado; 201, BORRADOR, reunión/reserva opcionales y notificaciones |
 | GET `/api/v1/actas?page=1&pageSize=20` | Nuevo; listado propio, paginación y total autorizado |
-| GET `/api/v1/actas/{actaId}` | Nuevo; detalle propio con plantilla/versión original, secciones, participantes y reunión/reserva |
+| GET `/api/v1/actas/{actaId}` | Detalle propio autorizado o compartido por participación, con plantilla/versión original, secciones, participantes y reunión/reserva |
+| GET `/api/v1/actas/shared-with-me` | Actas de otros creadores donde el usuario es participante interno; solo lectura |
 | PUT `/api/v1/actas/{actaId}` | Nuevo; reemplaza título, fecha y contenido en BORRADOR |
 | PUT `/api/v1/actas/{actaId}/participants` | Nuevo; reemplaza asociaciones en BORRADOR |
 | PUT `/api/v1/actas/{actaId}/participants/{participantId}/attendance` | Nuevo; true/false/null en BORRADOR |
