@@ -57,6 +57,7 @@ CREATE TABLE `sigocalco_meetings_template` (
     `solution_center_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
     `created_by_user` int NOT NULL,
     `created_at` datetime(6) NOT NULL,
+    `name_normalized` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin AS (lower(trim(`name`))) STORED NULL,
     CONSTRAINT `PK_sigocalco_meetings_template` PRIMARY KEY (`template_id`),
     CONSTRAINT `AK_sigocalco_meetings_template_template_id_acta_type_id` UNIQUE (`template_id`, `acta_type_id`),
     CONSTRAINT `chk_meetings_template_scope` CHECK ((scope = 'GLOBAL' AND solution_center_code IS NULL) OR (scope = 'CENTRO' AND solution_center_code IS NOT NULL AND CHAR_LENGTH(TRIM(solution_center_code)) > 0)),
@@ -104,7 +105,7 @@ CREATE TABLE `sigocalco_meetings_template_section` (
     `template_section_id` int NOT NULL AUTO_INCREMENT,
     `template_version_id` int NOT NULL,
     `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-    `content_type` enum('TEXTO','LISTA','TABLA','FORMULARIO','PARTICIPANTES') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    `content_type` enum('TEXTO','LISTA','TABLA','FORMULARIO','PARTICIPANTES','SUBTITULO') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
     `configuration_json` json NULL,
     `sort_order` int NOT NULL,
     `is_required` tinyint(1) NOT NULL,
@@ -327,6 +328,9 @@ CREATE UNIQUE INDEX `IX_sigocalco_meetings_permission_permission_key` ON `sigoca
 
 
 CREATE INDEX `IX_sigocalco_meetings_template_acta_type_id_scope_solution_cent~` ON `sigocalco_meetings_template` (`acta_type_id`, `scope`, `solution_center_code`);
+
+
+CREATE UNIQUE INDEX `UX_meetings_template_name_normalized` ON `sigocalco_meetings_template` (`name_normalized`);
 
 
 CREATE UNIQUE INDEX `IX_sigocalco_meetings_template_section_template_version_id_sort~` ON `sigocalco_meetings_template_section` (`template_version_id`, `sort_order`);

@@ -8,6 +8,12 @@
 @permissionKey = ACTAS_GESTION
 @actaId = 1
 @participantId = 1
+@textTemplateId = 1
+@textTemplateVersionId = 1
+@fixedTextSectionId = 1
+@subtitleSectionId = 2
+@editableTextSectionId = 3
+@textActaId = 1
 
 ### CORS: preflight de React, sin JWT ni body. Esperado 204 y Allow-Origin http://localhost:5173.
 # Usar la URL HTTPS directa: los preflight no deben depender de una redirección HTTP -> HTTPS.
@@ -142,6 +148,134 @@ Content-Type: application/json
     }
   }]
 }
+
+### TEXTO FIXED/EDITABLE y SUBTITULO: 201. Requiere migración 08 aprobada/aplicada previamente.
+# Copiar IDs de result a textTemplateId, textTemplateVersionId y los tres IDs de sección al inicio del archivo.
+# SUBTITULO usa title, no admite contenido y debe tener isRequired=false/configurationJson=null.
+# Repetir el nombre (también con distinto tipo, ámbito o centro autorizado) devuelve 409.
+POST {{baseUrl}}/api/v1/templates/with-version
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "actaTypeId": {{actaTypeId}},
+  "name": "Acta de ejemplo con textos",
+  "scope": "GLOBAL",
+  "solutionCenterCode": null,
+  "sections": [
+    {
+      "title": "Introducción",
+      "contentType": "TEXTO",
+      "sortOrder": 1,
+      "isRequired": true,
+      "configurationJson": {"mode":"FIXED","defaultText":"En CALCO S.A. se deja constancia de los siguientes hechos."}
+    },
+    {
+      "title": "DESARROLLO DE LA REUNIÓN",
+      "contentType": "SUBTITULO",
+      "sortOrder": 2,
+      "isRequired": false,
+      "configurationJson": null
+    },
+    {
+      "title": "Observaciones",
+      "contentType": "TEXTO",
+      "sortOrder": 3,
+      "isRequired": false,
+      "configurationJson": {"mode":"EDITABLE","defaultText":"Borrador inicial"}
+    }
+  ]
+}
+
+### Nombre equivalente al anterior: 409, sin registros parciales
+# {"isSuccess":false,"message":"Ya existe una plantilla con ese nombre, independientemente de su ámbito o centro.","result":null}
+# La misma regla se aplica a POST /templates/with-version y PUT /templates/{templateId}.
+POST {{baseUrl}}/api/v1/templates
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"actaTypeId":{{actaTypeId}},"name":"  ACTA DE EJEMPLO CON TEXTOS  ","scope":"GLOBAL","solutionCenterCode":null}
+
+### Inspeccionar configuración y orden de TEXTO/SUBTITULO: 200
+GET {{baseUrl}}/api/v1/template-versions/{{textTemplateVersionId}}
+Authorization: Bearer {{token}}
+
+### Crear acta con TEXTO: 201; usar un UUID nuevo para cada nueva operación
+# Requiere ACTAS_GESTION y centro asignado. No cambia permisos automáticamente.
+# FIXED se incorpora en el servidor aunque se omita; SUBTITULO no crea contenido.
+# contentJson es un string JSON. participants=[] no genera destinatarios de notificaciones.
+# Para comprobar ambos valores iniciales, enviar sections: [].
+POST {{baseUrl}}/api/v1/actas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: 55555555-5555-4555-8555-555555555555
+
+{
+  "templateVersionId": {{textTemplateVersionId}},
+  "title": "Seguimiento con textos",
+  "documentDate": "2026-11-25",
+  "solutionCenterCode": "{{solutionCenterCode}}",
+  "sections": [{"templateSectionId":{{editableTextSectionId}},"contentJson":"Acuerdos registrados durante la reunión."}],
+  "participants": [],
+  "meeting": null
+}
+
+### Editar TEXTO EDITABLE: 200. Solo borrador propio; preservar las demás secciones editables en el body
+# FIXED omitido/null mantiene el texto original; EDITABLE null usa defaultText y "" vacía una sección opcional.
+PUT {{baseUrl}}/api/v1/actas/{{textActaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Seguimiento con textos actualizado",
+  "documentDate": "2026-11-25",
+  "sections": [{"templateSectionId":{{editableTextSectionId}},"contentJson":"Observaciones actualizadas."}]
+}
+
+### Manipular FIXED: 400, sin guardar cambios. El mismo contenido también se rechaza en POST /actas.
+PUT {{baseUrl}}/api/v1/actas/{{textActaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Seguimiento con textos",
+  "documentDate": "2026-11-25",
+  "sections": [{"templateSectionId":{{fixedTextSectionId}},"contentJson":"Texto fijo manipulado"}]
+}
+
+### Intentar diligenciar SUBTITULO: 400, sin guardar cambios
+PUT {{baseUrl}}/api/v1/actas/{{textActaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Seguimiento con textos",
+  "documentDate": "2026-11-25",
+  "sections": [{"templateSectionId":{{subtitleSectionId}},"contentJson":"No es un campo editable"}]
+}
+
+### Nueva versión con TEXTO/SUBTITULO: 201; no cambia la versión ni el acta anteriores
+# La validación de nombre no bloquea una versión de la misma plantilla.
+# Cambiar mode por un valor distinto de FIXED/EDITABLE o defaultText por un número devuelve 400.
+POST {{baseUrl}}/api/v1/templates/{{textTemplateId}}/versions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sections": [
+    {"title":"Introducción","contentType":"TEXTO","sortOrder":1,"isRequired":true,"configurationJson":{"mode":"FIXED","defaultText":"Texto institucional de la segunda versión."}},
+    {"title":"DESARROLLO DE LA REUNIÓN","contentType":"SUBTITULO","sortOrder":2,"isRequired":false,"configurationJson":null},
+    {"title":"Observaciones","contentType":"TEXTO","sortOrder":3,"isRequired":false,"configurationJson":{"mode":"EDITABLE","defaultText":""}}
+  ]
+}
+
+### Consultar versiones de la plantilla de textos: 200, con configuración original de cada una
+GET {{baseUrl}}/api/v1/templates/{{textTemplateId}}/versions
+Authorization: Bearer {{token}}
+
+### Consultar el acta: 200, conserva FIXED de su versión; SUBTITULO devuelve contenido null
+GET {{baseUrl}}/api/v1/actas/{{textActaId}}
+Authorization: Bearer {{token}}
 
 ### Todas las versiones y secciones de la plantilla: 200; result es una lista ordenada
 GET {{baseUrl}}/api/v1/templates/{{templateId}}/versions

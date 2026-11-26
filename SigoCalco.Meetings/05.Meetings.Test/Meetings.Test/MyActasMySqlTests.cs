@@ -68,6 +68,7 @@ public sealed class MyActasMySqlTests
                     INSERT INTO sigocalco_meetings_meeting_notification(meeting_notification_id,meeting_id,recipient_email,recipient_name,message_id,subject,text_body,html_body,status,attempts,created_at,updated_at) VALUES(1,1,'historical@example.invalid','Histórico','historical@sigocalco.local','Historia','Historia','Historia','ENVIADO',1,'2026-11-01','2026-11-01');
                     """);
                 await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"sql","06_mis_actas_incremental.sql")));
+                await TemplateEvolutionMySqlTests.ApplyMigration(db);
                 Assert.Equal(new[]{"ANULADA","BORRADOR","PUBLICADA"},await db.Set<ActaStatus>().OrderBy(s=>s.Name).Select(s=>s.Name).ToArrayAsync());
                 Assert.Equal(1,(await db.Set<ActaStatus>().SingleAsync(s=>s.Name=="BORRADOR")).ActaStatusId);
                 Assert.Equal(5,(await db.Set<ActaStatus>().SingleAsync(s=>s.Name=="ANULADA")).ActaStatusId);

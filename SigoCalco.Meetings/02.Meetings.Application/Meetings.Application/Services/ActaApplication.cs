@@ -81,11 +81,11 @@ public sealed partial class ActaApplication(IActaStore store, ITemplateStore tem
         {
             supplied.TryGetValue(definition.TemplateSectionId, out var section);
             var configuration = definition.ConfigurationJson is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(definition.ConfigurationJson);
-            json.ValidateContent(definition.ContentType, configuration, section?.ContentJson, definition.IsRequired);
-            if (section is not null) sections.Add(new ActaSection
+            var content = json.ResolveContent(definition.ContentType, configuration, section?.ContentJson, definition.IsRequired);
+            if (definition.ContentType != "SUBTITULO" && (section is not null || SectionJsonValidator.HasValue(content))) sections.Add(new ActaSection
             {
                 TemplateVersionId = source.Version.TemplateVersionId, TemplateSectionId = definition.TemplateSectionId,
-                ContentJson = SectionJsonValidator.HasValue(section.ContentJson) ? section.ContentJson!.Value.GetRawText() : null
+                ContentJson = SectionJsonValidator.HasValue(content) ? content!.Value.GetRawText() : null
             });
         }
         return sections;
