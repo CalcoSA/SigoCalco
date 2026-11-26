@@ -10,11 +10,16 @@ public interface ISectionContentValidator
     string ContentType { get; }
     void ValidateConfiguration(JsonElement? configuration);
     void ValidateContent(JsonElement? configuration, JsonElement? content, bool required);
+    JsonElement? ResolveContent(JsonElement? configuration, JsonElement? content, bool required)
+    {
+        ValidateContent(configuration, content, required);
+        return content;
+    }
 }
 
 public sealed class SectionJsonValidator(IEnumerable<ISectionContentValidator> validators)
 {
-    public static readonly string[] ContentTypes = ["TEXTO", "LISTA", "TABLA", "FORMULARIO", "PARTICIPANTES"];
+    public static readonly string[] ContentTypes = ["TEXTO", "LISTA", "TABLA", "FORMULARIO", "PARTICIPANTES", "SUBTITULO"];
     private readonly Dictionary<string, ISectionContentValidator> strategies = validators.ToDictionary(x => x.ContentType);
 
     public void ValidateConfiguration(string contentType, JsonElement? configuration)
@@ -27,12 +32,21 @@ public sealed class SectionJsonValidator(IEnumerable<ISectionContentValidator> v
     }
 
     public void ValidateContent(string contentType, JsonElement? configuration, JsonElement? content, bool required)
+        => ResolveContent(contentType, configuration, content, required);
+
+    public JsonElement? ResolveContent(string contentType, JsonElement? configuration, JsonElement? content, bool required)
     {
         ValidateConfiguration(contentType, configuration);
         CheckJson(content);
-        if (strategies.TryGetValue(contentType, out var validator)) validator.ValidateContent(configuration, content, required);
-        else if (required || HasValue(content))
+        if (strategies.TryGetValue(contentType, out var validator))
+        {
+            var resolved = validator.ResolveContent(configuration, content, required);
+            CheckJson(resolved);
+            return resolved;
+        }
+        if (required || HasValue(content))
             throw MeetingsRequestException.Invalid($"No se ha definido un validador de contenido para {contentType}.");
+        return content;
     }
 
     public static bool HasValue(JsonElement? value) => value.HasValue && value.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);

@@ -18,6 +18,9 @@ public static class ActasModel
 
         var template = Table<Template>(model, "template", nameof(Template.TemplateId));
         Text(template, nameof(Template.Name), 200);
+        template.Property<string>("NormalizedName").HasColumnName("name_normalized").HasColumnType("varchar(200)")
+            .UseCollation("utf8mb4_bin").HasComputedColumnSql("lower(trim(`name`))", stored: true);
+        template.HasIndex("NormalizedName").IsUnique().HasDatabaseName("UX_meetings_template_name_normalized");
         Text(template, nameof(Template.SolutionCenterCode), 64);
         template.Property(x => x.Scope).HasColumnType("enum('GLOBAL','CENTRO')");
         template.HasAlternateKey(x => new { x.TemplateId, x.ActaTypeId });
@@ -36,7 +39,7 @@ public static class ActasModel
 
         var section = Table<TemplateSection>(model, "template_section", nameof(TemplateSection.TemplateSectionId));
         Text(section, nameof(TemplateSection.Title), 200);
-        section.Property(x => x.ContentType).HasColumnType("enum('TEXTO','LISTA','TABLA','FORMULARIO','PARTICIPANTES')");
+        section.Property(x => x.ContentType).HasColumnType("enum('TEXTO','LISTA','TABLA','FORMULARIO','PARTICIPANTES','SUBTITULO')");
         section.Property(x => x.ConfigurationJson).HasColumnType("json");
         section.HasIndex(x => new { x.TemplateVersionId, x.SortOrder }).IsUnique();
         section.HasAlternateKey(x => new { x.TemplateSectionId, x.TemplateVersionId });

@@ -65,6 +65,8 @@ builder.Services.AddScoped<IMeetingNotificationSender>(provider =>
 });
 builder.Services.AddScoped<IMeetingsIdentity, MeetingsIdentityAccessor>();
 builder.Services.AddSingleton<ISectionContentValidator, FormSectionValidator>();
+builder.Services.AddSingleton<ISectionContentValidator, TextSectionValidator>();
+builder.Services.AddSingleton<ISectionContentValidator, SubtitleSectionValidator>();
 builder.Services.AddSingleton<SectionJsonValidator>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>

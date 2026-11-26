@@ -17,10 +17,22 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
         context.Set<Template>().AsNoTracking().Include(t => t.ActaType).SingleOrDefaultAsync(t => t.TemplateId == id, ct);
     public async Task<int> CreateAsync(Template template, CancellationToken ct)
     {
+        await RequireAvailableNameAsync(template.Name, null, ct);
         context.Add(template);
-        await context.SaveChangesAsync(ct);
+        try { await context.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex) when (ex.InnerException is MySqlException mysql && IsNameConflict(mysql))
+        { context.ChangeTracker.Clear(); throw DuplicateName(); }
         return template.TemplateId;
     }
+    private async Task RequireAvailableNameAsync(string name, int? exceptId, CancellationToken ct)
+    {
+        var normalized = name.Trim().ToLowerInvariant();
+        if (await context.Set<Template>().AnyAsync(t => (!exceptId.HasValue || t.TemplateId != exceptId.Value) &&
+            EF.Property<string>(t, "NormalizedName") == normalized, ct)) throw DuplicateName();
+    }
+    private static bool IsNameConflict(MySqlException error) => error.Number == 1062 &&
+        error.Message.Contains("UX_meetings_template_name_normalized", StringComparison.OrdinalIgnoreCase);
+    private static MeetingsRequestException DuplicateName() => new(409, "Ya existe una plantilla con ese nombre, independientemente de su ámbito o centro.");
     public async Task<IReadOnlyDictionary<string, string>> GetPermissionsAsync(CancellationToken ct) =>
         await context.Set<MeetingsPermission>().AsNoTracking().ToDictionaryAsync(p => p.PermissionKey, p => p.PermissionValue, ct);
 
@@ -43,8 +55,13 @@ public sealed class TemplateStore(MeetingsDbContext context) : ITemplateStore
             .SingleOrDefaultAsync(v => v.TemplateVersionId == versionId, ct);
     public async Task UpdateNameAsync(int templateId, string name, CancellationToken ct)
     {
-        if (await context.Set<Template>().Where(t => t.TemplateId == templateId).ExecuteUpdateAsync(s => s.SetProperty(t => t.Name, name), ct) != 1)
-            throw MeetingsRequestException.NotFound("No se encontró la plantilla.");
+        await RequireAvailableNameAsync(name, templateId, ct);
+        try
+        {
+            if (await context.Set<Template>().Where(t => t.TemplateId == templateId).ExecuteUpdateAsync(s => s.SetProperty(t => t.Name, name), ct) != 1)
+                throw MeetingsRequestException.NotFound("No se encontró la plantilla.");
+        }
+        catch (MySqlException ex) when (IsNameConflict(ex)) { throw DuplicateName(); }
     }
 
     public async Task<TemplateVersion> CreateVersionAsync(TemplateVersion version, CancellationToken ct)
