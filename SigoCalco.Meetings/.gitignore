@@ -1,2 +1,12 @@
+# Esta configuración base contiene valores privados de SMTP; conservarla solo en el equipo.
+/01.Meetings.Api/Meetings.Api/appsettings.json
+
+# Configuración privada local y sus variantes. Development comparte únicamente CORS/logging.
 **/appsettings.Local.json
+**/appsettings.Local.*.json
+**/appsettings.*.Local.json
+
+# Los ejemplos sin secretos se comparten con el equipo.
+!**/appsettings.*.example.json
+
 artifacts/
