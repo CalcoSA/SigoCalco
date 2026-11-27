@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/01.Library.Api/">
+    <Project Path="Library.Api/Library.Api.csproj" />
+  </Folder>
+  <Folder Name="/02.Library.Application/">
+    <Project Path="Library.Application/Library.Application.csproj" />
+  </Folder>
+  <Folder Name="/03.Library.Domain/">
+    <Project Path="Library.Domain/Library.Domain.csproj" />
+  </Folder>
+  <Folder Name="/04.Library.Infrastructure/">
+    <Project Path="Library.Infrastructure.Persistance/Library.Infrastructure.Persistance.csproj" />
+  </Folder>
+  <Folder Name="/05.Library.Test/">
+    <Project Path="Library.Test/Library.Test.csproj" />
+  </Folder>
+</Solution>
