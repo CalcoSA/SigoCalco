@@ -57,6 +57,8 @@ public sealed class MeetingsApiFactory : WebApplicationFactory<Program>
     {
         connection.Open();
         connection.CreateFunction<string, int>("CHAR_LENGTH", x => x.Length);
+        connection.CreateFunction<string, string>("lower", x => x.ToLowerInvariant(), isDeterministic: true);
+        connection.CreateCollation("utf8mb4_bin", string.CompareOrdinal);
     }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

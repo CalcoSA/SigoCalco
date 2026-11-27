@@ -80,6 +80,8 @@ public sealed class TemplateApplication(ITemplateStore store, IMeetingsIdentity 
                 throw MeetingsRequestException.Invalid("sortOrder debe ser positivo y único.");
             var contentType = RequiredText(section.ContentType, 20, "contentType").ToUpperInvariant();
             json.ValidateConfiguration(contentType, section.ConfigurationJson);
+            if (contentType == "SUBTITULO" && section.IsRequired)
+                throw MeetingsRequestException.Invalid("SUBTITULO no admite isRequired=true.");
             sections.Add(new TemplateSection
             {
                 Title = RequiredText(section.Title, 200, "title"), ContentType = contentType,

@@ -1,5 +1,7 @@
 # Entrega: seis permisos, Mis plantillas y SMTP
 
+Actualización del 25/11/2026: [PLANTILLAS_TEXTO_SUBTITULO.md](PLANTILLAS_TEXTO_SUBTITULO.md) define TEXTO FIXED/EDITABLE, SUBTITULO y nombres únicos globales. Sustituye la limitación histórica de TEXTO de la sección 5. La migración incremental 08 requiere aprobación antes de aplicarse a la base real y debe preceder al despliegue del backend actualizado.
+
 Actualización del 20/11/2026: [MIS_ACTAS.md](MIS_ACTAS.md) describe los estados, edición/asistencia y reservas opcionales. Sustituye la regla histórica de correo de las secciones 9 y 11: ahora se notifica a los participantes explícitos al crear cualquier acta, incluso sin reunión, y el creador no se añade automáticamente como destinatario.
 
 Actualización del 19/11/2026: la administración de las asignaciones de estos seis permisos mediante GET/POST/PUT está documentada en [PERMISSIONS_API.md](PERMISSIONS_API.md). Solo el rol real Administrador puede utilizarla; no cambia las definiciones ni introduce nuevas claves.

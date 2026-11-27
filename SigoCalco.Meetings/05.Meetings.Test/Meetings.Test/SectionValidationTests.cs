@@ -6,7 +6,7 @@ namespace Meetings.Test;
 
 public sealed class SectionValidationTests
 {
-    private readonly SectionJsonValidator validator = new([new FormSectionValidator()]);
+    private readonly SectionJsonValidator validator = new([new FormSectionValidator(), new TextSectionValidator(), new SubtitleSectionValidator()]);
     private static JsonElement Json(string value) => JsonSerializer.Deserialize<JsonElement>(value);
 
     [Fact]
@@ -48,7 +48,8 @@ public sealed class SectionValidationTests
     public void Undefined_contracts_allow_placeholder_not_arbitrary_configuration(string type)
     {
         validator.ValidateConfiguration(type, null);
-        Assert.Throws<MeetingsRequestException>(() => validator.ValidateConfiguration(type, Json("{}")));
+        if (type == "TEXTO") validator.ValidateConfiguration(type, Json("{}")); // Legacy TEXTO is now editable.
+        else Assert.Throws<MeetingsRequestException>(() => validator.ValidateConfiguration(type, Json("{}")));
         Assert.Throws<MeetingsRequestException>(() => validator.ValidateContent(type, null, Json("{}"), false));
     }
 

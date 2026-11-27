@@ -38,7 +38,7 @@ public sealed class TemplateApiTests
         new("Información general", "FORMULARIO", order, true, Form)]);
     private static async Task<int> Create(HttpClient client, int type = 1, string scope = "GLOBAL", string? center = null)
     {
-        var response = await client.PostAsJsonAsync("/api/v1/templates", new CreateTemplateDto(type, "Acta general", scope, center));
+        var response = await client.PostAsJsonAsync("/api/v1/templates", new CreateTemplateDto(type, "Acta general " + Guid.NewGuid().ToString("N"), scope, center));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadResultAsync<CreatedTemplateDto>())!.TemplateId;
     }
